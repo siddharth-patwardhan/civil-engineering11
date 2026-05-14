@@ -1,0 +1,9 @@
+{
+  "name": "Civil Estimation Pro",
+  "short_name": "CivilPro",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#4442e3",
+  "description": "Civil estimation, BOQ, and IS code compliance"
+}

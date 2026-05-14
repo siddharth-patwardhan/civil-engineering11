@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrgRole {
+  SUPER_ADMIN
+  PROJECT_MANAGER
+  ESTIMATOR
+  SITE_ENGINEER
+  VIEWER
+  CLIENT
+}
+
+enum ProjectRole {
+  OWNER
+  MANAGER
+  ESTIMATOR
+  SITE_ENGINEER
+  VIEWER
+}
+
+enum ApprovalState {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+  APPROVED
+  REJECTED
+}
+
+enum DrawingJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETE
+  FAILED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String?
+  supabaseId   String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  orgMemberships     OrganizationMember[]
+  projectMemberships ProjectMember[]
+  auditEvents        AuditEvent[]         @relation("AuditActor")
+  notifications      Notification[]
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members   OrganizationMember[]
+  projects  Project[]
+  rateBooks RateBook[]
+}
+
+model OrganizationMember {
+  id     String  @id @default(uuid())
+  userId String
+  orgId  String
+  role   OrgRole
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+}
+
+model Project {
+  id                  String    @id @default(uuid())
+  orgId               String
+  name                String
+  clientName          String?
+  location            String?
+  tenderNumber        String?
+  structureType       String?
+  budgetEstimate      Decimal?  @db.Decimal(18, 2)
+  isStandardsVersion  String?
+  scheduleStart       DateTime?
+  scheduleEnd         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  members      ProjectMember[]
+  measurements MeasurementLine[]
+  boqVersions  BoqVersion[]
+  drawings     Drawing[]
+  approvals    Approval[]
+  rateAnalyses RateAnalysis[]
+}
+
+model ProjectMember {
+  id        String      @id @default(uuid())
+  projectId String
+  userId    String
+  role      ProjectRole
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+}
+
+model MeasurementLine {
+  id               String   @id @default(uuid())
+  projectId        String
+  templateKey      String?
+  rowIndex         Int      @default(0)
+  desc             String
+  no               String?
+  l                String?
+  w                String?
+  h                String?
+  unit             String
+  formulaJson      Json?
+  deductionsJson   Json?
+  quantityResolved Decimal? @db.Decimal(18, 6)
+  derivationTrace  Json?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model BoqVersion {
+  id           String   @id @default(uuid())
+  projectId    String
+  version      Int
+  label        String?
+  snapshotHash String?
+  createdAt    DateTime @default(now())
+  createdById  String?
+
+  project Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lines   BoqLine[]
+
+  @@unique([projectId, version])
+}
+
+model BoqLine {
+  id           String  @id @default(uuid())
+  boqVersionId String
+  itemNo       String
+  description  String
+  unit         String
+  quantity     Decimal @db.Decimal(18, 6)
+  rate         Decimal @db.Decimal(18, 4)
+  amount       Decimal @db.Decimal(18, 2)
+
+  boqVersion BoqVersion @relation(fields: [boqVersionId], references: [id], onDelete: Cascade)
+
+  @@index([boqVersionId])
+}
+
+model RateBook {
+  id            String    @id @default(uuid())
+  orgId         String
+  name          String
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  items        RateBookItem[]
+
+  @@index([orgId, effectiveFrom])
+}
+
+model RateBookItem {
+  id          String  @id @default(uuid())
+  rateBookId  String
+  code        String
+  description String
+  unit        String
+  rate        Decimal @db.Decimal(18, 4)
+
+  rateBook RateBook @relation(fields: [rateBookId], references: [id], onDelete: Cascade)
+
+  @@index([rateBookId])
+}
+
+model RateAnalysis {
+  id             String   @id @default(uuid())
+  projectId      String
+  boqLineId      String?
+  name           String
+  materialCost   Decimal  @db.Decimal(18, 2)
+  labourCost     Decimal  @db.Decimal(18, 2)
+  equipmentCost  Decimal  @db.Decimal(18, 2)
+  overheadPct    Decimal? @db.Decimal(9, 4)
+  profitPct      Decimal? @db.Decimal(9, 4)
+  totalRate      Decimal  @db.Decimal(18, 4)
+  createdAt      DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model IsStandard {
+  id               String    @id @default(uuid())
+  code             String
+  section          String
+  category         String
+  title            String
+  value            Json
+  formula          String?
+  notes            String?
+  unit             String?
+  effectiveFrom    DateTime  @default(now())
+  effectiveTo      DateTime?
+  jurisdiction     String    @default("IN")
+  rulePackVersion  Int       @default(1)
+  sourceCitation   String?
+
+  @@index([code, section])
+  @@index([category])
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Drawing {
+  id          String            @id @default(uuid())
+  projectId   String
+  fileName    String
+  storagePath String
+  jobStatus   DrawingJobStatus  @default(PENDING)
+  meta        Json?
+  createdAt   DateTime          @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+}
+
+model Approval {
+  id         String         @id @default(uuid())
+  projectId  String
+  entityType String
+  entityId   String
+  state      ApprovalState  @default(DRAFT)
+  note       String?
+  updatedAt  DateTime       @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, entityType, entityId])
+}
