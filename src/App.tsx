@@ -7,12 +7,14 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProjectProvider } from './context/ProjectContext';
 import { AppBootstrap } from './features/app/AppBootstrap';
-import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
+import { AppShell } from './components/AppShell';
+import './styles/design-system.css';
+
+import Dashboard from './pages/DashboardNew';
 import Projects from './pages/Projects';
-import CreateProject from './pages/CreateProject';
-import Measurements from './pages/Measurement';
-import BOQ from './pages/BOQ';
+import CreateProject from './pages/CreateProjectNew';
+import Measurements from './pages/MeasurementNew';
+import BOQ from './pages/BOQNew';
 import RateAnalysis from './pages/RateAnalysis';
 import Materials from './pages/Materials';
 import Labour from './pages/Labour';
@@ -35,23 +37,22 @@ export default function App() {
         <AppBootstrap />
         <Router>
           <Routes>
-          <Route path="/login" element={<Login />} />
-          
-          <Route element={<Layout />}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/create-project" element={<CreateProject />} />
-            <Route path="/measurement" element={<Measurements />} />
-            <Route path="/boq" element={<BOQ />} />
-            <Route path="/assistant" element={<Assistant />} />
-            <Route path="/rates" element={<RateAnalysis />} />
-            <Route path="/materials" element={<Materials />} />
-            <Route path="/labour" element={<Labour />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/alerts" element={<Notifications />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
+            <Route path="/login" element={<Login />} />
+            <Route element={<AppShell />}>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/projects" element={<Projects />} />
+              <Route path="/create-project" element={<CreateProject />} />
+              <Route path="/measurement" element={<Measurements />} />
+              <Route path="/boq" element={<BOQ />} />
+              <Route path="/assistant" element={<Assistant />} />
+              <Route path="/rates" element={<RateAnalysis />} />
+              <Route path="/materials" element={<Materials />} />
+              <Route path="/labour" element={<Labour />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/alerts" element={<Notifications />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
           </Routes>
         </Router>
       </ProjectProvider>
