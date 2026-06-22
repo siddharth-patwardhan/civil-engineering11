@@ -9,7 +9,7 @@ export interface Column<T> {
   header: string;
   width?: string | number;
   align?: "left" | "right" | "center";
-  render: (row: T, index: number) => React.ReactNode;
+  render: (row: T, index: number) => import("react").ReactNode;
   editable?: boolean;
 }
 

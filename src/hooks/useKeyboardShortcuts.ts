@@ -4,7 +4,7 @@ interface ShortcutMap {
   [key: string]: (e: KeyboardEvent) => void;
 }
 
-export function useKeyboardShortcuts(shortcuts: ShortcutMap, deps: React.DependencyList = []) {
+export function useKeyboardShortcuts(shortcuts: ShortcutMap, deps: import("react").DependencyList = []) {
   useEffect(() => {
     function handler(e: KeyboardEvent) {
       const key = [];

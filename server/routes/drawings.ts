@@ -1,23 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
-import multer from "multer";
 import { Router } from "express";
+import { uploadSingleDrawing } from "../middleware/upload.js";
 import { requirePrisma } from "../db.js";
 import { writeAudit } from "../auditLog.js";
 import { assertProjectAccess } from "../services/projectAccess.js";
 
 const uploadDir = path.join(process.cwd(), "uploads", "drawings");
 fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-    cb(null, `${Date.now()}-${safe}`);
-  },
-});
-
-const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
 
 export const drawingsRouter = Router({ mergeParams: true });
 
@@ -39,7 +29,7 @@ drawingsRouter.get("/", async (req, res) => {
 });
 
 /** Async job stub: mark PROCESSING then COMPLETE on next tick */
-drawingsRouter.post("/", upload.single("file"), async (req, res) => {
+drawingsRouter.post("/", uploadSingleDrawing("file"), async (req, res) => {
   try {
     const userId = req.auth!.userId;
     const { projectId } = req.params as { projectId: string };
@@ -58,6 +48,8 @@ drawingsRouter.post("/", upload.single("file"), async (req, res) => {
     });
     await writeAudit(userId, "drawing.upload", "Drawing", drawing.id, {
       fileName: drawing.fileName,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
     });
     setImmediate(() => {
       void (async () => {

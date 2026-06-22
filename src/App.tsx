@@ -5,9 +5,11 @@
 
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ErrorBoundary } from 'react-error-boundary';
 import { ProjectProvider } from './context/ProjectContext';
 import { AppBootstrap } from './features/app/AppBootstrap';
 import { AppShell } from './components/AppShell';
+import { AppErrorFallback } from './components/ErrorBoundary';
 import './styles/design-system.css';
 
 import Dashboard from './pages/DashboardNew';
@@ -32,30 +34,32 @@ const queryClient = new QueryClient({
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ProjectProvider>
-        <AppBootstrap />
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route element={<AppShell />}>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/create-project" element={<CreateProject />} />
-              <Route path="/measurement" element={<Measurements />} />
-              <Route path="/boq" element={<BOQ />} />
-              <Route path="/assistant" element={<Assistant />} />
-              <Route path="/rates" element={<RateAnalysis />} />
-              <Route path="/materials" element={<Materials />} />
-              <Route path="/labour" element={<Labour />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/alerts" element={<Notifications />} />
-              <Route path="/settings" element={<Settings />} />
-            </Route>
-          </Routes>
-        </Router>
-      </ProjectProvider>
-    </QueryClientProvider>
+    <ErrorBoundary FallbackComponent={AppErrorFallback} onReset={() => window.location.reload()}>
+      <QueryClientProvider client={queryClient}>
+        <ProjectProvider>
+          <AppBootstrap />
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route element={<AppShell />}>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/projects" element={<Projects />} />
+                <Route path="/create-project" element={<CreateProject />} />
+                <Route path="/measurement" element={<Measurements />} />
+                <Route path="/boq" element={<BOQ />} />
+                <Route path="/assistant" element={<Assistant />} />
+                <Route path="/rates" element={<RateAnalysis />} />
+                <Route path="/materials" element={<Materials />} />
+                <Route path="/labour" element={<Labour />} />
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/alerts" element={<Notifications />} />
+                <Route path="/settings" element={<Settings />} />
+              </Route>
+            </Routes>
+          </Router>
+        </ProjectProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

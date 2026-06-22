@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDarkMode } from "./DarkModeProvider";
 
@@ -56,7 +56,7 @@ export function CommandPalette() {
   }, []);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
+    (e: KeyboardEvent) => {
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setSelectedIndex((i) => Math.min(i + 1, filtered.length - 1));

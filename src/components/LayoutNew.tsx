@@ -41,10 +41,12 @@ function SidebarItem({
   item,
   isActive,
   collapsed,
+  _key,
 }: {
   item: NavItem;
   isActive: boolean;
   collapsed: boolean;
+  _key?: string;
 }) {
   return (
     <NavLink
@@ -172,7 +174,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
         <nav className={cn("flex-1 flex flex-col gap-1 mt-4 overflow-y-auto hide-scrollbar", collapsed ? "px-2" : "px-3")}>
           {primaryNav.map((item) => (
             <SidebarItem
-              key={item.path}
+              _key={item.path}
               item={item}
               isActive={pathname === item.path || pathname.startsWith(item.path + "/")}
               collapsed={collapsed}
@@ -183,7 +185,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
 
           {secondaryNav.map((item) => (
             <SidebarItem
-              key={item.path}
+              _key={item.path}
               item={item}
               isActive={pathname === item.path}
               collapsed={collapsed}

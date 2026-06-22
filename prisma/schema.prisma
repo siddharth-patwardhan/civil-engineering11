@@ -39,6 +39,24 @@ enum DrawingJobStatus {
   FAILED
 }
 
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum ProjectType {
+  RESIDENTIAL
+  COMMERCIAL
+  INDUSTRIAL
+  ROAD
+  BRIDGE
+  IRRIGATION
+  GOVERNMENT
+  INFRASTRUCTURE
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -59,9 +77,13 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members   OrganizationMember[]
-  projects  Project[]
-  rateBooks RateBook[]
+  members      OrganizationMember[]
+  projects     Project[]
+  rateBooks    RateBook[]
+  materials    MaterialMaster[]
+  labour       LabourCategory[]
+  equipment    EquipmentMaster[]
+  templates    MeasurementTemplate[]
 }
 
 model OrganizationMember {
@@ -77,27 +99,30 @@ model OrganizationMember {
 }
 
 model Project {
-  id                  String    @id @default(uuid())
+  id                  String        @id @default(uuid())
   orgId               String
   name                String
   clientName          String?
   location            String?
   tenderNumber        String?
   structureType       String?
-  budgetEstimate      Decimal?  @db.Decimal(18, 2)
+  budgetEstimate      Decimal?      @db.Decimal(18, 2)
   isStandardsVersion  String?
   scheduleStart       DateTime?
   scheduleEnd         DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  status              ProjectStatus @default(ACTIVE)
+  type                ProjectType?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
   members      ProjectMember[]
   measurements MeasurementLine[]
   boqVersions  BoqVersion[]
   drawings     Drawing[]
   approvals    Approval[]
   rateAnalyses RateAnalysis[]
+  sections     BoqSection[]
 }
 
 model ProjectMember {
@@ -149,18 +174,26 @@ model BoqVersion {
 }
 
 model BoqLine {
-  id           String  @id @default(uuid())
-  boqVersionId String
-  itemNo       String
-  description  String
-  unit         String
-  quantity     Decimal @db.Decimal(18, 6)
-  rate         Decimal @db.Decimal(18, 4)
-  amount       Decimal @db.Decimal(18, 2)
+  id             String  @id @default(uuid())
+  boqVersionId   String
+  itemNo         String
+  description    String
+  unit           String
+  quantity       Decimal @db.Decimal(18, 6)
+  rate           Decimal @db.Decimal(18, 4)
+  amount         Decimal @db.Decimal(18, 2)
+  sectionId      String?
+  subSectionId   String?
+  category       String? // Earthwork, Concrete, etc.
+  isGenerated    Boolean @default(false)
 
-  boqVersion BoqVersion @relation(fields: [boqVersionId], references: [id], onDelete: Cascade)
+  boqVersion   BoqVersion     @relation(fields: [boqVersionId], references: [id], onDelete: Cascade)
+  section      BoqSection?    @relation(fields: [sectionId], references: [id], onDelete: SetNull)
+  subSection   BoqSubSection? @relation(fields: [subSectionId], references: [id], onDelete: SetNull)
 
   @@index([boqVersionId])
+  @@index([sectionId])
+  @@index([subSectionId])
 }
 
 model RateBook {
@@ -281,4 +314,112 @@ model Approval {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, entityType, entityId])
+}
+
+model MaterialMaster {
+  id       String   @id @default(uuid())
+  orgId    String
+  code     String
+  name     String
+  category String
+  unit     String
+  spec     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  rates        MaterialRate[]
+
+  @@index([orgId, category])
+}
+
+model MaterialRate {
+  id            String   @id @default(uuid())
+  materialId    String
+  supplierId    String?
+  supplierName  String?
+  rate          Decimal  @db.Decimal(18, 4)
+  effectiveFrom DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  material MaterialMaster @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@index([materialId, effectiveFrom])
+}
+
+model LabourCategory {
+  id         String   @id @default(uuid())
+  orgId      String
+  name       String
+  dailyRate  Decimal  @db.Decimal(18, 2)
+  unit       String   @default("day") // day, hour, job
+  skillLevel String   @default("semi_skilled") // skilled, unskilled, semi_skilled
+  productivityUnit String? // e.g., "m³/day", "m²/day"
+  productivityRate   Decimal? @db.Decimal(18, 4)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, skillLevel])
+}
+
+model EquipmentMaster {
+  id          String   @id @default(uuid())
+  orgId       String
+  name        String
+  category    String
+  rentalRate  Decimal  @db.Decimal(18, 2)
+  unit        String   @default("day") // day, hour, job
+  capacity    String?  // e.g., "1.5 cum", "50 ton"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, category])
+}
+
+model BoqSection {
+  id        String   @id @default(uuid())
+  projectId String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  subSections BoqSubSection[]
+  lines       BoqLine[]
+
+  @@index([projectId, sortOrder])
+}
+
+model BoqSubSection {
+  id        String   @id @default(uuid())
+  sectionId String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  section BoqSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  lines   BoqLine[]
+
+  @@index([sectionId, sortOrder])
+}
+
+model MeasurementTemplate {
+  id          String   @id @default(uuid())
+  orgId       String?
+  name        String
+  description String?
+  category    String   // e.g., "RCC", "Masonry", "Earthwork"
+  defaultUnit String
+  defaultDims Json?    // { l: true, w: true, h: true }
+  isStandardClause String? // linked IS clause
+  formulaHint String?  // e.g., "N*L*W*H"
+  createdAt   DateTime @default(now())
+
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, category])
 }

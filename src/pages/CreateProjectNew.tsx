@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/services/api";
 import { useProject } from "../context/ProjectContext";
@@ -13,7 +13,7 @@ export default function CreateProjectNew() {
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
