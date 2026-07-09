@@ -1,27 +1,41 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/services/api';
+import { useAuth } from '@/features/auth/AuthProvider';
 import { useProjectUiStore } from '@/features/project/projectUiStore';
+import { signInSetupConfig } from '@/config/signInSetup';
 
 export default function Login() {
   const navigate = useNavigate();
   const setActiveProjectId = useProjectUiStore((s) => s.setActiveProjectId);
+  const { refresh } = useAuth();
+  const [email, setEmail] = useState('engineer@domain.com');
+  const [name, setName] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const finishSignIn = async (signInFn: () => Promise<{ needsSetup: boolean; defaultProjectId: string | null }>) => {
+    setErr(null);
+    setLoading(true);
+    try {
+      const data = await signInFn();
+      await refresh();
+      if (data.defaultProjectId) setActiveProjectId(data.defaultProjectId);
+      navigate(data.needsSetup ? '/setup' : '/dashboard');
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/dashboard');
+    void finishSignIn(() => api.signIn(email.trim(), name.trim() || undefined));
   };
 
-  const handleDevLogin = async () => {
-    setErr(null);
-    try {
-      const data = await api.devSession();
-      setActiveProjectId(data.defaultProjectId);
-      navigate('/dashboard');
-    } catch (e) {
-      setErr(String(e));
-    }
+  const handleDevLogin = () => {
+    void finishSignIn(() => api.devSession());
   };
 
   return (
@@ -42,7 +56,7 @@ export default function Login() {
         <div className="w-full max-w-[420px] flex flex-col">
           <div className="mb-stack-lg text-center lg:text-left mt-stack-lg lg:mt-0">
             <h2 className="font-headline-lg text-headline-lg text-on-surface mb-stack-sm">Access Portal</h2>
-            <p className="font-body-md text-body-md text-on-surface-variant">Enter your credentials to continue.</p>
+            <p className="font-body-md text-body-md text-on-surface-variant">Sign in to configure your company and start estimating.</p>
           </div>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-stack-md">
@@ -50,33 +64,38 @@ export default function Login() {
               <label htmlFor="email" className="font-label-caps text-label-caps text-on-surface-variant">Corporate Email</label>
               <div className="relative">
                 <span className="material-symbols-outlined absolute left-base top-1/2 -translate-y-1/2 text-outline">mail</span>
-                <input 
-                  type="email" 
-                  id="email" 
-                  defaultValue="engineer@domain.com"
-                  className="w-full h-touch-target-min pl-10 pr-base bg-surface border border-outline rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-2 focus:border-primary transition-all placeholder:text-outline-variant" 
+                <input
+                  type="email"
+                  id="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full h-touch-target-min pl-10 pr-base bg-surface border border-outline rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-2 focus:border-primary transition-all placeholder:text-outline-variant"
                 />
               </div>
             </div>
 
             <div className="flex flex-col gap-stack-sm">
-              <div className="flex justify-between items-center">
-                <label htmlFor="password" className="font-label-caps text-label-caps text-on-surface-variant">Password</label>
-                <a href="#" className="font-label-caps text-label-caps text-primary hover:underline">Forgot?</a>
-              </div>
+              <label htmlFor="name" className="font-label-caps text-label-caps text-on-surface-variant">Your Name</label>
               <div className="relative">
-                <span className="material-symbols-outlined absolute left-base top-1/2 -translate-y-1/2 text-outline">lock</span>
-                <input 
-                  type="password" 
-                  id="password" 
-                  defaultValue="password"
-                  className="w-full h-touch-target-min pl-10 pr-base bg-surface border border-outline rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-2 focus:border-primary transition-all placeholder:text-outline-variant" 
+                <span className="material-symbols-outlined absolute left-base top-1/2 -translate-y-1/2 text-outline">person</span>
+                <input
+                  type="text"
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Used for first-time org setup"
+                  className="w-full h-touch-target-min pl-10 pr-base bg-surface border border-outline rounded font-body-md text-body-md text-on-surface focus:outline-none focus:border-2 focus:border-primary transition-all placeholder:text-outline-variant"
                 />
               </div>
             </div>
 
-            <button type="submit" className="w-full h-touch-target-min bg-primary text-on-primary rounded font-table-data text-table-data hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center mt-base shadow-sm">
-              Authenticate
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-touch-target-min bg-primary text-on-primary rounded font-table-data text-table-data hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center mt-base shadow-sm disabled:opacity-50"
+            >
+              {loading ? 'Signing in...' : 'Sign In & Setup'}
             </button>
           </form>
 
@@ -89,17 +108,21 @@ export default function Login() {
           <div className="flex flex-col gap-stack-md">
             <button
               type="button"
+              disabled={loading}
               onClick={() => void handleDevLogin()}
-              className="w-full h-touch-target-min border border-outline bg-surface-container-lowest text-on-surface rounded font-table-data text-table-data hover:bg-surface-container-low active:bg-surface-container transition-colors flex items-center justify-center gap-base"
+              className="w-full h-touch-target-min border border-outline bg-surface-container-lowest text-on-surface rounded font-table-data text-table-data hover:bg-surface-container-low active:bg-surface-container transition-colors flex items-center justify-center gap-base disabled:opacity-50"
             >
-              <span className="material-symbols-outlined text-primary">developer_mode</span>
-              Dev session (API + DB)
+              {loading ? (
+                <span className="material-symbols-outlined text-primary animate-spin">refresh</span>
+              ) : (
+                <span className="material-symbols-outlined text-primary">developer_mode</span>
+              )}
+              {loading ? 'Authenticating...' : signInSetupConfig.signIn.devModeLabel}
             </button>
             {err && <p className="text-error text-sm">{err}</p>}
-            <button type="button" className="w-full h-touch-target-min border border-outline bg-surface-container-lowest text-on-surface rounded font-table-data text-table-data hover:bg-surface-container-low active:bg-surface-container transition-colors flex items-center justify-center gap-base">
-              <span className="material-symbols-outlined text-primary">face</span>
-              Face ID / Biometric
-            </button>
+            <p className="text-xs text-on-surface-variant">
+              First sign-in walks you through company profile, GST/reg ID, currency (INR default), and IS standards.
+            </p>
           </div>
         </div>
       </div>

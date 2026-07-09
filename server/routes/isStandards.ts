@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import { safeErrorMessage } from "../security/httpErrors.js";
 import { requirePrisma } from "../db.js";
 
 export function attachIsStandards(api: Router) {
@@ -13,7 +14,7 @@ export function attachIsStandards(api: Router) {
       });
       res.json({ standards: rows });
     } catch (e) {
-      res.status(503).json({ error: String(e) });
+      res.status(503).json({ error: safeErrorMessage(e) });
     }
   });
 }

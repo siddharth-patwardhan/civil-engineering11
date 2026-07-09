@@ -1,34 +1,55 @@
 import type { BoqLineDTO, MeasureRowInput } from "./schemas";
-import { isVolumeUnit } from "./schemas";
-import { resolveQuantityStrict } from "./formula";
+import { isAreaUnit, isMassUnit, isVolumeUnit } from "./schemas";
+import { defaultOpForUnit, resolveQuantityStrict } from "./formula";
 
 const EXCAVATION_RATE = 15;
 const CONCRETE_RATE = 250;
 const STEEL_PER_M3 = 0.1406;
 const STEEL_RATE = 1800;
+const SITE_CLEARANCE_QTY = 2500;
+const SITE_CLEARANCE_RATE = 4;
+
+function sumByUnitType(
+  rows: MeasureRowInput[],
+  predicate: (unit: string) => boolean,
+): number {
+  let total = 0;
+  for (const row of rows) {
+    if (!predicate(row.unit)) continue;
+    const op = defaultOpForUnit(row.unit);
+    const r = resolveQuantityStrict(row, op);
+    if (r.ok) total += r.quantity;
+  }
+  return total;
+}
 
 /**
  * Deterministic BOQ lines from measurement book (excavation-linked demo categories).
  */
 export function generateBoqFromMeasurements(rows: MeasureRowInput[]): BoqLineDTO[] {
-  let excavationQty = 0;
-  for (const row of rows) {
-    if (!isVolumeUnit(row.unit)) continue;
-    const r = resolveQuantityStrict(row, "volume");
-    if (r.ok) excavationQty += r.quantity;
-  }
+  const excavationQty = sumByUnitType(rows, isVolumeUnit);
+  const areaQty = sumByUnitType(rows, isAreaUnit);
+  const steelFromRebar = sumByUnitType(rows, (u) => u === "rebar" || u === "kg");
+  const steelFromMass = sumByUnitType(rows, isMassUnit);
 
   const concreteQty = excavationQty;
-  const steelQty = concreteQty * STEEL_PER_M3;
+  const steelQty =
+    steelFromRebar > 0
+      ? steelFromRebar / 1000
+      : steelFromMass > 0
+        ? steelFromMass
+        : concreteQty * STEEL_PER_M3;
+
+  const siteClearanceQty = areaQty > 0 ? areaQty : SITE_CLEARANCE_QTY;
 
   return [
     {
       itemNo: "1.01",
       description: "Clear site of all vegetation, scrub, and debris.",
       unit: "m²",
-      quantity: 2500,
-      rate: 4,
-      amount: 2500 * 4,
+      quantity: siteClearanceQty,
+      rate: SITE_CLEARANCE_RATE,
+      amount: siteClearanceQty * SITE_CLEARANCE_RATE,
     },
     {
       itemNo: "1.02",
@@ -49,7 +70,7 @@ export function generateBoqFromMeasurements(rows: MeasureRowInput[]): BoqLineDTO
     {
       itemNo: "2.02",
       description: "High-yield reinforcing steel bars (T16-T20).",
-      unit: "tonne",
+      unit: "t",
       quantity: steelQty,
       rate: STEEL_RATE,
       amount: steelQty * STEEL_RATE,

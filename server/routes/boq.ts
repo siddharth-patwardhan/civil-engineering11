@@ -1,7 +1,9 @@
+import { Prisma } from "@prisma/client";
+import { safeErrorMessage } from "../security/httpErrors.js";
 import { createHash } from "node:crypto";
 import { Router } from "express";
 import { generateBoqFromMeasurements } from "../../src/domain/boqGenerator.js";
-import { measureRowInputSchema } from "../../src/domain/schemas.js";
+import { measureRowInputSchema, coerceMeasurementUnit, boqLinesSyncBodySchema } from "../../src/domain/schemas.js";
 import { requirePrisma } from "../db.js";
 import { writeAudit } from "../auditLog.js";
 import { assertProjectAccess } from "../services/projectAccess.js";
@@ -39,7 +41,7 @@ boqRouter.get("/versions", async (req, res) => {
     });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });
 
@@ -82,7 +84,7 @@ boqRouter.post("/versions", async (req, res) => {
           l: m.l ?? "",
           w: m.w ?? "",
           h: m.h ?? "",
-          unit: m.unit as "m³" | "m²" | "m" | "nos",
+          unit: coerceMeasurementUnit(m.unit),
           templateKey: m.templateKey,
           formulaJson: m.formulaJson,
           deductionsJson: m.deductionsJson,
@@ -128,7 +130,88 @@ boqRouter.post("/versions", async (req, res) => {
     res.status(201).json({ version });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
+  }
+});
+
+boqRouter.put("/versions/:versionId/lines", async (req, res) => {
+  try {
+    const userId = req.auth!.userId;
+    const { projectId, versionId } = req.params as { projectId: string; versionId: string };
+    await assertProjectAccess(userId, projectId);
+    const parsed = boqLinesSyncBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.flatten() });
+    }
+    const prisma = requirePrisma();
+    const version = await prisma.boqVersion.findFirst({
+      where: { id: versionId, projectId },
+      include: { lines: true },
+    });
+    if (!version) return res.status(404).json({ error: "BOQ version not found" });
+
+    const existingById = new Map(version.lines.map((l) => [l.id, l]));
+    const keptIds = new Set<string>();
+
+    await prisma.$transaction(async (tx) => {
+      for (const line of parsed.data.lines) {
+        const data = {
+          itemNo: line.itemNo,
+          description: line.description,
+          unit: line.unit,
+          quantity: new Prisma.Decimal(line.quantity),
+          rate: new Prisma.Decimal(line.rate),
+          amount: new Prisma.Decimal(line.amount),
+        };
+        if (line.id && existingById.has(line.id)) {
+          await tx.boqLine.update({ where: { id: line.id }, data });
+          keptIds.add(line.id);
+        } else {
+          const created = await tx.boqLine.create({
+            data: { boqVersionId: versionId, ...data },
+          });
+          keptIds.add(created.id);
+        }
+      }
+      const toDelete = version.lines.filter((l) => !keptIds.has(l.id)).map((l) => l.id);
+      if (toDelete.length > 0) {
+        await tx.boqLine.deleteMany({ where: { id: { in: toDelete } } });
+      }
+      const snapshotHash = createHash("sha256")
+        .update(JSON.stringify(parsed.data.lines))
+        .digest("hex");
+      await tx.boqVersion.update({
+        where: { id: versionId },
+        data: { snapshotHash },
+      });
+    });
+
+    const updated = await prisma.boqVersion.findFirst({
+      where: { id: versionId },
+      include: { lines: true },
+    });
+    await writeAudit(userId, "boq.lines.sync", "BoqVersion", versionId, {
+      lineCount: parsed.data.lines.length,
+    });
+    res.json({
+      version: {
+        id: updated!.id,
+        version: updated!.version,
+        label: updated!.label,
+        lines: updated!.lines.map((l) => ({
+          id: l.id,
+          itemNo: l.itemNo,
+          description: l.description,
+          unit: l.unit,
+          quantity: Number(l.quantity),
+          rate: Number(l.rate),
+          amount: Number(l.amount),
+        })),
+      },
+    });
+  } catch (e) {
+    const status = (e as Error & { status?: number }).status ?? 503;
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });
 
@@ -175,6 +258,6 @@ boqRouter.get("/versions/:a/diff/:b", async (req, res) => {
     res.json({ diff });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });

@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "cron:run": "tsx scripts/run-cron.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

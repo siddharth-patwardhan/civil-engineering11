@@ -139,6 +139,63 @@ async function main() {
     });
   }
 
+  const equipmentSeed = [
+    { name: "Concrete Vibrator", category: "concreting", rentalRate: 800, unit: "day", capacity: "1.5 kW" },
+    { name: "Transit Mixer 6 cum", category: "concreting", rentalRate: 4500, unit: "day", capacity: "6 m³" },
+    { name: "Batching Plant", category: "concreting", rentalRate: 12000, unit: "day", capacity: "30 m³/hr" },
+    { name: "Excavator JCB", category: "earthwork", rentalRate: 8500, unit: "day", capacity: "0.8 cum bucket" },
+    { name: "Tower Crane", category: "lifting", rentalRate: 25000, unit: "day", capacity: "50 m reach" },
+    { name: "Plate Compactor", category: "earthwork", rentalRate: 600, unit: "day", capacity: "100 kg" },
+    { name: "Concrete Pump", category: "concreting", rentalRate: 150, unit: "m³", capacity: "90 m³/hr" },
+    { name: "Bar Bending Machine", category: "steel", rentalRate: 1200, unit: "day", capacity: "32 mm max" },
+  ];
+
+  for (const eq of equipmentSeed) {
+    const exists = await prisma.equipmentMaster.findFirst({
+      where: { orgId: org.id, name: eq.name },
+    });
+    if (!exists) {
+      await prisma.equipmentMaster.create({
+        data: { orgId: org.id, ...eq, rentalRate: eq.rentalRate },
+      });
+    }
+  }
+
+  const materialSeed = [
+    { code: "CEM-53", name: "OPC 53 Grade Cement", category: "cement", unit: "bag", rate: 420 },
+    { code: "AGG-20", name: "Coarse Aggregate 20mm", category: "aggregate", unit: "m³", rate: 1200 },
+    { code: "STEEL-T16", name: "HYSD Steel T16", category: "steel", unit: "kg", rate: 72 },
+    { code: "SAND", name: "River Sand (fine)", category: "sand", unit: "m³", rate: 1800 },
+  ];
+  for (const mat of materialSeed) {
+    const exists = await prisma.materialMaster.findFirst({ where: { orgId: org.id, code: mat.code } });
+    if (!exists) {
+      await prisma.materialMaster.create({
+        data: {
+          orgId: org.id,
+          code: mat.code,
+          name: mat.name,
+          category: mat.category,
+          unit: mat.unit,
+          rates: { create: { rate: mat.rate, effectiveFrom: new Date() } },
+        },
+      });
+    }
+  }
+
+  const labourSeed = [
+    { name: "Mason (skilled)", dailyRate: 900, skillLevel: "skilled", productivityUnit: "m³/day", productivityRate: 2.5 },
+    { name: "Helper (unskilled)", dailyRate: 550, skillLevel: "unskilled", productivityUnit: "m³/day", productivityRate: 4 },
+    { name: "Bar bender", dailyRate: 850, skillLevel: "skilled", productivityUnit: "kg/day", productivityRate: 400 },
+    { name: "Concreter", dailyRate: 750, skillLevel: "semi_skilled", productivityUnit: "m³/day", productivityRate: 3 },
+  ];
+  for (const lb of labourSeed) {
+    const exists = await prisma.labourCategory.findFirst({ where: { orgId: org.id, name: lb.name } });
+    if (!exists) {
+      await prisma.labourCategory.create({ data: { orgId: org.id, ...lb, dailyRate: lb.dailyRate, productivityRate: lb.productivityRate } });
+    }
+  }
+
   await prisma.notification.deleteMany({
     where: { userId: user.id, title: "Welcome (seed)" },
   });

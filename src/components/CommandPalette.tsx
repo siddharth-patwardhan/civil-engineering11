@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef, type ReactNode, type KeyboardEvent } from "react";
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDarkMode } from "./DarkModeProvider";
+import { useProjectUiStore } from "@/features/project/projectUiStore";
+import { projectPathOrLegacy, type ProjectScopedPage } from "@/features/project/projectRoutes";
 
 interface CommandItem {
   id: string;
@@ -17,16 +19,20 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { toggle: toggleDarkMode } = useDarkMode();
+  const activeProjectId = useProjectUiStore((s) => s.activeProjectId);
+
+  const go = (page: ProjectScopedPage | null, legacy: string) => () =>
+    navigate(page ? projectPathOrLegacy(activeProjectId, page) : legacy);
 
   const commands: CommandItem[] = [
     { id: "dash", label: "Go to Dashboard", shortcut: "Ctrl+1", icon: "dashboard", action: () => navigate("/dashboard") },
     { id: "proj", label: "Go to Projects", shortcut: "Ctrl+2", icon: "architecture", action: () => navigate("/projects") },
-    { id: "meas", label: "Go to Measurement", shortcut: "Ctrl+3", icon: "straighten", action: () => navigate("/measurement") },
-    { id: "boq", label: "Go to BOQ", shortcut: "Ctrl+4", icon: "request_quote", action: () => navigate("/boq") },
-    { id: "rates", label: "Go to Rate Analysis", shortcut: "Ctrl+5", icon: "analytics", action: () => navigate("/rates") },
-    { id: "mat", label: "Go to Materials", shortcut: "Ctrl+6", icon: "inventory_2", action: () => navigate("/materials") },
-    { id: "lab", label: "Go to Labour", shortcut: "Ctrl+7", icon: "engineering", action: () => navigate("/labour") },
-    { id: "rep", label: "Go to Reports", shortcut: "Ctrl+8", icon: "description", action: () => navigate("/reports") },
+    { id: "meas", label: "Go to Measurement", shortcut: "Ctrl+3", icon: "straighten", action: go("measurement", "/measurement") },
+    { id: "boq", label: "Go to BOQ", shortcut: "Ctrl+4", icon: "request_quote", action: go("boq", "/boq") },
+    { id: "rates", label: "Go to Rate Analysis", shortcut: "Ctrl+5", icon: "analytics", action: go("rates", "/rates") },
+    { id: "mat", label: "Go to Materials", shortcut: "Ctrl+6", icon: "inventory_2", action: go("materials", "/materials") },
+    { id: "lab", label: "Go to Labour", shortcut: "Ctrl+7", icon: "engineering", action: go("labour", "/labour") },
+    { id: "rep", label: "Go to Reports", shortcut: "Ctrl+8", icon: "description", action: go("reports", "/reports") },
     { id: "sett", label: "Go to Settings", shortcut: "Ctrl+9", icon: "settings", action: () => navigate("/settings") },
     { id: "new-proj", label: "Create New Project", icon: "add", action: () => navigate("/create-project") },
     { id: "toggle-theme", label: "Toggle Dark Mode", shortcut: "Ctrl+Shift+D", icon: "dark_mode", action: toggleDarkMode },

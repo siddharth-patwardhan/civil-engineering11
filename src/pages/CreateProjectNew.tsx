@@ -2,11 +2,14 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/services/api";
 import { useProject } from "../context/ProjectContext";
+import { useProjectUiStore } from "@/features/project/projectUiStore";
+import { projectPath } from "@/features/project/projectRoutes";
 import { showToast } from "@/components/ToastProvider";
 
 export default function CreateProjectNew() {
   const navigate = useNavigate();
   const { setMeasureRows } = useProject();
+  const setActiveProjectId = useProjectUiStore((s) => s.setActiveProjectId);
   const [name, setName] = useState("");
   const [clientName, setClientName] = useState("");
   const [location, setLocation] = useState("");
@@ -29,8 +32,9 @@ export default function CreateProjectNew() {
         }),
       });
       showToast("Project created successfully", "success");
-      setMeasureRows([{ id: "1", desc: "", no: "", l: "", w: "", h: "", unit: "m³" }]);
-      navigate("/measurement");
+      setActiveProjectId(res.project.id);
+      setMeasureRows([{ id: "1", desc: "", no: "", l: "", w: "", h: "", ded: "", unit: "m³" }]);
+      navigate(projectPath(res.project.id, "measurement"));
     } catch (err) {
       showToast(String(err), "error");
     } finally {

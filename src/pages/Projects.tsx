@@ -1,7 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/services/api";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { useProjectUiStore } from "@/features/project/projectUiStore";
+import { projectPath } from "@/features/project/projectRoutes";
+import { showToast } from "@/components/ToastProvider";
 
 type ProjectRow = {
   id: string;
@@ -13,12 +16,13 @@ type ProjectRow = {
 
 export default function Projects() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const setActiveProjectId = useProjectUiStore((s) => s.setActiveProjectId);
 
   const { data, isError, error, isLoading } = useQuery({
     queryKey: ["projects"],
     queryFn: () => api.fetch<{ projects: ProjectRow[] }>("/api/projects"),
-    enabled: Boolean(api.getToken()),
+    enabled: isAuthenticated,
   });
 
   const projects = data?.projects ?? [];
@@ -48,13 +52,13 @@ export default function Projects() {
 
         <div className="flex items-center gap-gutter w-full md:w-auto overflow-x-auto pb-2 md:pb-0 hide-scrollbar mt-4 md:mt-0 justify-between">
           <div className="flex gap-base">
-            <button className="h-10 px-4 rounded-full bg-surface-variant text-on-surface font-label-caps text-label-caps flex items-center justify-center whitespace-nowrap hover:bg-surface-dim transition-colors border border-outline-variant shrink-0">
+            <button onClick={() => showToast("Filter not implemented in demo", "info")} className="h-10 px-4 rounded-full bg-surface-variant text-on-surface font-label-caps text-label-caps flex items-center justify-center whitespace-nowrap hover:bg-surface-dim transition-colors border border-outline-variant shrink-0">
               All Status
             </button>
-            <button className="h-10 px-4 rounded-full bg-surface-container-lowest text-on-surface-variant font-label-caps text-label-caps flex items-center justify-center whitespace-nowrap border border-outline-variant hover:bg-surface-container-low transition-colors shrink-0">
+            <button onClick={() => showToast("Filter not implemented in demo", "info")} className="h-10 px-4 rounded-full bg-surface-container-lowest text-on-surface-variant font-label-caps text-label-caps flex items-center justify-center whitespace-nowrap border border-outline-variant hover:bg-surface-container-low transition-colors shrink-0">
               Commercial
             </button>
-            <button className="h-10 px-4 rounded-full bg-surface-container-lowest text-on-surface-variant font-label-caps text-label-caps flex items-center justify-center whitespace-nowrap border border-outline-variant hover:bg-surface-container-low transition-colors shrink-0">
+            <button onClick={() => showToast("Filter not implemented in demo", "info")} className="h-10 px-4 rounded-full bg-surface-container-lowest text-on-surface-variant font-label-caps text-label-caps flex items-center justify-center whitespace-nowrap border border-outline-variant hover:bg-surface-container-low transition-colors shrink-0">
               Infrastructure
             </button>
           </div>
@@ -105,7 +109,7 @@ export default function Projects() {
               <button
                 onClick={() => {
                   setActiveProjectId(p.id);
-                  navigate("/measurement");
+                  navigate(projectPath(p.id, "measurement"));
                 }}
                 className="h-touch-target-min px-6 bg-secondary text-on-secondary rounded-lg font-table-data text-table-data hover:bg-[#3b39c6] transition-colors shadow-sm"
               >

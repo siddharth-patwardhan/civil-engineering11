@@ -1,4 +1,5 @@
 import type { Router } from "express";
+import { safeErrorMessage } from "../security/httpErrors.js";
 import { requirePrisma } from "../db.js";
 
 export function attachNotifications(api: Router) {
@@ -13,7 +14,7 @@ export function attachNotifications(api: Router) {
       });
       res.json({ notifications: list });
     } catch (e) {
-      res.status(503).json({ error: String(e) });
+      res.status(503).json({ error: safeErrorMessage(e) });
     }
   });
 
@@ -30,7 +31,7 @@ export function attachNotifications(api: Router) {
       }
       res.json({ ok: true });
     } catch (e) {
-      res.status(503).json({ error: String(e) });
+      res.status(503).json({ error: safeErrorMessage(e) });
     }
   });
 }

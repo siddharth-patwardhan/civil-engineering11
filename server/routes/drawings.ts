@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeErrorMessage } from "../security/httpErrors.js";
 import path from "node:path";
 import { Router } from "express";
 import { uploadSingleDrawing } from "../middleware/upload.js";
@@ -24,7 +25,7 @@ drawingsRouter.get("/", async (req, res) => {
     res.json({ drawings: list });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });
 
@@ -67,6 +68,6 @@ drawingsRouter.post("/", uploadSingleDrawing("file"), async (req, res) => {
     res.status(201).json({ drawing });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });

@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
+import { safeErrorMessage } from "../security/httpErrors.js";
 import { Router } from "express";
 import { projectCreateSchema } from "../../src/domain/schemas.js";
+import { validateProjectId } from "../middleware/validateParams.js";
 import { requirePrisma } from "../db.js";
 import { writeAudit } from "../auditLog.js";
 import { assertProjectAccess } from "../services/projectAccess.js";
@@ -10,8 +12,13 @@ import { ratesRouter } from "./rates.js";
 import { drawingsRouter } from "./drawings.js";
 import { approvalsRouter } from "./approvals.js";
 import { reportsRouter } from "./reports.js";
+import { equipmentRouter } from "./equipment.js";
+import { materialsRouter } from "./materials.js";
+import { labourRouter } from "./labour.js";
 
 export const projectsRouter = Router();
+
+projectsRouter.use("/:projectId", validateProjectId);
 
 projectsRouter.get("/", async (req, res) => {
   try {
@@ -36,7 +43,7 @@ projectsRouter.get("/", async (req, res) => {
     res.json({ projects });
   } catch (e) {
     console.error(e);
-    res.status(503).json({ error: String(e) });
+    res.status(503).json({ error: safeErrorMessage(e) });
   }
 });
 
@@ -78,7 +85,7 @@ projectsRouter.post("/", async (req, res) => {
     res.status(201).json({ project });
   } catch (e) {
     console.error(e);
-    res.status(503).json({ error: String(e) });
+    res.status(503).json({ error: safeErrorMessage(e) });
   }
 });
 
@@ -88,6 +95,9 @@ projectsRouter.use("/:projectId/rates", ratesRouter);
 projectsRouter.use("/:projectId/drawings", drawingsRouter);
 projectsRouter.use("/:projectId/approvals", approvalsRouter);
 projectsRouter.use("/:projectId/reports", reportsRouter);
+projectsRouter.use("/:projectId/equipment", equipmentRouter);
+projectsRouter.use("/:projectId/materials", materialsRouter);
+projectsRouter.use("/:projectId/labour", labourRouter);
 
 projectsRouter.get("/:projectId", async (req, res) => {
   try {
@@ -96,6 +106,6 @@ projectsRouter.get("/:projectId", async (req, res) => {
     res.json({ project });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });

@@ -1,7 +1,18 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { AssistantResponse } from "@/domain/assistantSchema";
+import type { MeasurementUnit } from "@/domain/schemas";
+import type { MeasureRow } from "@/context/ProjectContext";
+import { useProject } from "@/context/ProjectContext";
+import { useActiveProjectId } from "@/features/project/useActiveProjectId";
+import { projectPathOrLegacy } from "@/features/project/projectRoutes";
+import { showToast } from "@/components/ToastProvider";
+import { api } from "@/services/api";
 
 export default function Assistant() {
+  const navigate = useNavigate();
+  const activeProjectId = useActiveProjectId();
+  const { setMeasureRows } = useProject();
   const [naturalInput, setNaturalInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AssistantResponse | null>(null);
@@ -16,32 +27,47 @@ export default function Assistant() {
     setResponse(null);
 
     try {
-      const res = await fetch("/api/analyze-structure", {
+      const data = await api.fetch<AssistantResponse>("/api/analyze-structure", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ description: naturalInput }),
       });
-
-      if (!res.ok) {
-        let errStr = "Unknown error";
-        try {
-          const errBody = await res.json();
-          errStr = errBody.error || errStr;
-        } catch {
-          errStr = await res.text();
-        }
-        throw new Error(errStr);
-      }
-
-      const data = await res.json();
       setResponse(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       setLoading(false);
     }
+  };
+
+  const addToMeasurementBook = (data: AssistantResponse) => {
+    const elements = data.estimationImpact?.estimatedElements ?? [];
+    const rows: MeasureRow[] = elements.map((el, i) => ({
+      id: `asst-${Date.now()}-${i}`,
+      desc: el,
+      no: "1",
+      l: "",
+      w: "",
+      h: "",
+      ded: "",
+      unit: "m³" as MeasurementUnit,
+      templateKey: null,
+    }));
+    if (rows.length === 0) {
+      rows.push({
+        id: `asst-${Date.now()}`,
+        desc: data.projectInterpretation?.identifiedStructure ?? "Assistant item",
+        no: "1",
+        l: "",
+        w: "",
+        h: "",
+        ded: "",
+        unit: "m³",
+        templateKey: null,
+      });
+    }
+    setMeasureRows(rows);
+    showToast(`Added ${rows.length} row(s) to measurement book`, "success");
+    navigate(projectPathOrLegacy(activeProjectId, "measurement"));
   };
 
   return (
@@ -202,10 +228,18 @@ export default function Assistant() {
 
             {response.estimationImpact && (
               <div className="bg-tertiary-container text-on-tertiary-container border border-outline-variant rounded-xl p-stack-md shadow-sm">
-                <h3 className="font-title-md text-title-md flex items-center gap-2 mb-stack-sm pb-2 border-b border-tertiary/20">
-                  <span className="material-symbols-outlined">calculate</span>{" "}
-                  BOQ Impact
-                </h3>
+                <div className="flex justify-between items-start mb-stack-sm pb-2 border-b border-tertiary/20">
+                  <h3 className="font-title-md text-title-md flex items-center gap-2">
+                    <span className="material-symbols-outlined">calculate</span> BOQ Impact
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => addToMeasurementBook(response)}
+                    className="text-sm px-3 py-1 rounded-full bg-primary text-on-primary hover:opacity-90"
+                  >
+                    Add to measurement book
+                  </button>
+                </div>
                 <div className="flex flex-col gap-2 font-body-md text-body-md">
                   <p>
                     <strong>Concrete:</strong>{" "}

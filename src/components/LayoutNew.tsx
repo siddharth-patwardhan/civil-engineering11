@@ -4,6 +4,8 @@ import { cn } from "../lib/utils";
 import { useDarkMode } from "./DarkModeProvider";
 import { showToast } from "./ToastProvider";
 import { CommandPalette } from "./CommandPalette";
+import { useProjectUiStore } from "@/features/project/projectUiStore";
+import { projectPathOrLegacy, scopedPageFromLegacyPath } from "@/features/project/projectRoutes";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -41,16 +43,16 @@ function SidebarItem({
   item,
   isActive,
   collapsed,
-  _key,
+  to,
 }: {
   item: NavItem;
   isActive: boolean;
   collapsed: boolean;
-  _key?: string;
+  to: string;
 }) {
   return (
     <NavLink
-      to={item.path}
+      to={to}
       className={cn(
         "flex items-center gap-3 px-3 py-2 rounded-lg transition-all select-none group relative",
         isActive
@@ -90,7 +92,18 @@ export default function Layout({ children }: { children?: ReactNode }) {
   const { resolved, toggle } = useDarkMode();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const activeProjectId = useProjectUiStore((s) => s.activeProjectId);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  const navPath = (item: NavItem) => {
+    const scoped = scopedPageFromLegacyPath(item.path);
+    return scoped ? projectPathOrLegacy(activeProjectId, scoped) : item.path;
+  };
+
+  const isNavActive = (item: NavItem) => {
+    const to = navPath(item);
+    return pathname === to || pathname.startsWith(to + "/") || pathname === item.path;
+  };
 
   /* Collapse on small screens */
   useEffect(() => {
@@ -111,7 +124,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
           const item = all[num - 1];
           if (item) {
             e.preventDefault();
-            navigate(item.path);
+            navigate(navPath(item));
           }
         }
         if (e.key.toLowerCase() === "d" && e.shiftKey) {
@@ -123,7 +136,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, toggle, resolved]);
+  }, [navigate, toggle, resolved, activeProjectId]);
 
   const sidebarWidth = collapsed ? "w-[72px]" : "w-[256px]";
 
@@ -173,23 +186,27 @@ export default function Layout({ children }: { children?: ReactNode }) {
         {/* Primary Nav */}
         <nav className={cn("flex-1 flex flex-col gap-1 mt-4 overflow-y-auto hide-scrollbar", collapsed ? "px-2" : "px-3")}>
           {primaryNav.map((item) => (
-            <SidebarItem
-              _key={item.path}
-              item={item}
-              isActive={pathname === item.path || pathname.startsWith(item.path + "/")}
-              collapsed={collapsed}
-            />
+            <div key={item.path}>
+              <SidebarItem
+                item={item}
+                to={navPath(item)}
+                isActive={isNavActive(item)}
+                collapsed={collapsed}
+              />
+            </div>
           ))}
 
           <div className={cn("my-2 border-t border-border-default", collapsed ? "mx-2" : "mx-3")} />
 
           {secondaryNav.map((item) => (
-            <SidebarItem
-              _key={item.path}
-              item={item}
-              isActive={pathname === item.path}
-              collapsed={collapsed}
-            />
+            <div key={item.path}>
+              <SidebarItem
+                item={item}
+                to={item.path}
+                isActive={pathname === item.path}
+                collapsed={collapsed}
+              />
+            </div>
           ))}
         </nav>
 
@@ -230,14 +247,14 @@ export default function Layout({ children }: { children?: ReactNode }) {
         <header className="sticky top-0 z-40 h-14 flex items-center justify-between px-6 border-b border-border-default bg-bg-primary/80 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <span className="font-body text-body text-text-muted">
-              {pathname === "/dashboard" && "Executive Overview"}
+              {(pathname === "/dashboard" || pathname.startsWith("/projects/") && pathname.endsWith("/dashboard")) && "Executive Overview"}
               {pathname === "/projects" && "Projects"}
-              {pathname === "/measurement" && "Measurement Book"}
-              {pathname === "/boq" && "Bill of Quantities"}
-              {pathname === "/rates" && "Rate Analysis"}
-              {pathname === "/materials" && "Material Library"}
-              {pathname === "/labour" && "Labour Management"}
-              {pathname === "/reports" && "Reports Center"}
+              {(pathname === "/measurement" || pathname.includes("/measurement")) && "Measurement Book"}
+              {(pathname === "/boq" || pathname.includes("/boq")) && "Bill of Quantities"}
+              {(pathname === "/rates" || pathname.includes("/rates")) && "Rate Analysis"}
+              {(pathname === "/materials" || pathname.includes("/materials")) && "Material Library"}
+              {(pathname === "/labour" || pathname.includes("/labour")) && "Labour Management"}
+              {(pathname === "/reports" || pathname.includes("/reports")) && "Reports Center"}
               {pathname === "/settings" && "Settings"}
               {pathname === "/alerts" && "Alerts"}
             </span>

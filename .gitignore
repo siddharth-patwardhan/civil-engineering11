@@ -3,6 +3,7 @@ build/
 dist/
 coverage/
 uploads/
+data/
 playwright-report/
 test-results/
 .DS_Store

@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { safeErrorMessage } from "../security/httpErrors.js";
 import { Router } from "express";
 import { defaultOpForUnit, resolveQuantityStrict } from "../../src/domain/formula.js";
 import { measurementSyncBodySchema } from "../../src/domain/schemas.js";
@@ -36,7 +37,7 @@ measurementsRouter.get("/", async (req, res) => {
     });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });
 
@@ -58,6 +59,11 @@ measurementsRouter.put("/", async (req, res) => {
       for (const row of lines) {
         const op = defaultOpForUnit(row.unit);
         const q = resolveQuantityStrict(row, op);
+        let qty = q.ok ? q.quantity : null;
+        if (qty != null && row.deductionsJson && typeof row.deductionsJson === "object") {
+          const ded = (row.deductionsJson as { deduction?: number }).deduction;
+          if (typeof ded === "number" && ded > 0) qty = Math.max(0, qty - ded);
+        }
         await tx.measurementLine.create({
           data: {
             projectId,
@@ -71,7 +77,7 @@ measurementsRouter.put("/", async (req, res) => {
             templateKey: row.templateKey ?? null,
             formulaJson: (row.formulaJson ?? undefined) as Prisma.InputJsonValue | undefined,
             deductionsJson: (row.deductionsJson ?? undefined) as Prisma.InputJsonValue | undefined,
-            quantityResolved: q.ok ? q.quantity : null,
+            quantityResolved: qty,
             derivationTrace: (!q.ok
               ? { error: (q as { ok: false; error: string }).error }
               : (JSON.parse(JSON.stringify(q.trace)) as Prisma.InputJsonValue)) as Prisma.InputJsonValue,
@@ -86,6 +92,6 @@ measurementsRouter.put("/", async (req, res) => {
     res.json({ ok: true, count: lines.length });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });

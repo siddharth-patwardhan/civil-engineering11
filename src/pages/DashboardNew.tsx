@@ -1,6 +1,12 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/services/api";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { useProjectUiStore } from "@/features/project/projectUiStore";
+import { projectPathOrLegacy } from "@/features/project/projectRoutes";
+import { SimpleBarChart } from "@/components/SimpleBarChart";
+import { formatInrCompact } from "@/lib/formatCurrency";
 
 interface DashboardMetrics {
   totalProjects: number;
@@ -13,33 +19,44 @@ interface DashboardMetrics {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const activeProjectId = useProjectUiStore((s) => s.activeProjectId);
+  const setActiveProjectId = useProjectUiStore((s) => s.setActiveProjectId);
 
-  const { data: metrics, isLoading } = useQuery({
+  const { data: metrics, isLoading, isError, error } = useQuery({
     queryKey: ["dashboard"],
-    queryFn: () =>
-      api.fetch<DashboardMetrics>("/api/dashboard").catch(() => ({
-        totalProjects: 0,
-        activeEstimates: 0,
-        pendingQuotations: 0,
-        budgetVariance: 0,
-        recentProjects: [],
-        costDistribution: [],
-      } as DashboardMetrics)),
-    enabled: Boolean(api.getToken()),
+    queryFn: () => api.fetch<DashboardMetrics>("/api/dashboard"),
+    enabled: isAuthenticated,
+    staleTime: 2 * 60_000,
   });
 
-  const formatCurrency = (num: number) => {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 1 }).format(num);
-  };
+  const costChartData = useMemo(
+    () =>
+      (metrics?.costDistribution ?? []).map((d) => ({
+        label: d.category,
+        value: d.amount,
+      })),
+    [metrics?.costDistribution],
+  );
 
-  const statusColor = (variance: number) => {
-    if (variance < -5) return "bg-status-danger";
-    if (variance < 0) return "bg-status-warning";
-    return "bg-status-success";
-  };
+  const materialChartData = useMemo(
+    () =>
+      (metrics?.costDistribution ?? [])
+        .filter((d) => d.category !== "Earthwork")
+        .map((d) => ({
+          label: d.category,
+          value: d.amount,
+        })),
+    [metrics?.costDistribution],
+  );
 
   return (
     <div className="flex flex-col gap-6">
+      {isError && (
+        <div className="bg-error-container text-on-error-container p-4 rounded-lg">
+          Failed to load dashboard data. {(error as Error)?.message}
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -57,7 +74,7 @@ export default function Dashboard() {
             New Project
           </button>
           <button
-            onClick={() => navigate("/boq")}
+            onClick={() => navigate(projectPathOrLegacy(activeProjectId, "boq"))}
             className="h-9 px-4 rounded-lg border border-border-default text-text-primary font-table text-table hover:bg-bg-hover transition-colors"
           >
             Import BOQ
@@ -83,7 +100,7 @@ export default function Dashboard() {
         />
         <MetricCard
           label="Pending Quotations"
-          value={isLoading ? "—" : formatCurrency(metrics?.pendingQuotations ?? 0)}
+          value={isLoading ? "—" : formatInrCompact(metrics?.pendingQuotations ?? 0)}
           icon="inventory_2"
           trend="Under review"
           trendType="warning"
@@ -97,24 +114,37 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Charts Row (stubs) */}
+      {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-bg-surface border border-border-default rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-h2 text-h2 text-text-primary">Cost Distribution</h3>
-            <span className="font-label text-label text-text-muted">Last 30 days</span>
+            <span className="font-label text-label text-text-muted">By BOQ category</span>
           </div>
-          <div className="h-64 flex items-center justify-center text-text-muted font-body text-body">
-            Chart integration pending — connect to Recharts or Chart.js
-          </div>
+          {isLoading ? (
+            <div className="h-64 flex items-center justify-center text-text-muted font-body text-body">Loading…</div>
+          ) : costChartData.length === 0 ? (
+            <div className="h-64 flex items-center justify-center text-text-muted font-body text-body">
+              No cost data yet. Create a BOQ to see distribution.
+            </div>
+          ) : (
+            <SimpleBarChart data={costChartData} height={256} />
+          )}
         </div>
         <div className="bg-bg-surface border border-border-default rounded-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-h2 text-h2 text-text-primary">Material Breakdown</h3>
+            <span className="font-label text-label text-text-muted">Excl. earthwork</span>
           </div>
-          <div className="h-64 flex items-center justify-center text-text-muted font-body text-body">
-            Chart integration pending
-          </div>
+          {isLoading ? (
+            <div className="h-64 flex items-center justify-center text-text-muted font-body text-body">Loading…</div>
+          ) : materialChartData.length === 0 ? (
+            <div className="h-64 flex items-center justify-center text-text-muted font-body text-body">
+              No material cost data available.
+            </div>
+          ) : (
+            <SimpleBarChart data={materialChartData} height={256} />
+          )}
         </div>
       </div>
 
@@ -152,7 +182,10 @@ export default function Dashboard() {
                 <tr
                   key={p.id}
                   className={`border-b border-border-default hover:bg-bg-hover transition-colors cursor-pointer ${i % 2 === 0 ? "bg-bg-surface" : "bg-bg-primary"}`}
-                  onClick={() => navigate(`/projects`)}
+                  onClick={() => {
+                    setActiveProjectId(p.id);
+                    navigate(projectPathOrLegacy(p.id, "measurement"));
+                  }}
                 >
                   <td className="px-4 py-3 font-table text-table text-text-primary">{p.name}</td>
                   <td className="px-4 py-3 font-table text-table text-text-secondary">{p.clientName ?? "—"}</td>
@@ -162,7 +195,11 @@ export default function Dashboard() {
                   <td className="px-4 py-3 font-table text-table text-text-muted">{p.updatedAt}</td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={(e) => { e.stopPropagation(); navigate("/measurement"); }}
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        setActiveProjectId(p.id);
+                        navigate(projectPathOrLegacy(p.id, "measurement")); 
+                      }}
                       className="font-table text-table text-accent-primary hover:underline"
                     >
                       Open

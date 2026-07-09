@@ -1,8 +1,14 @@
-import type { Express, Request, Response } from "express";
+import type { Request, Response } from "express";
+import { z } from "zod";
 import { GoogleGenAI } from "@google/genai";
 import { assistantResponseSchema } from "../../src/domain/assistantSchema.js";
 import { prisma } from "../db.js";
 import { STRUCTURAL_ASSISTANT_SYSTEM } from "../prompts/assistantStructPrompt.js";
+import { sendSafeError } from "../security/httpErrors.js";
+
+const assistantInputSchema = z.object({
+  description: z.string().min(1).max(4000),
+});
 
 const PROMPT_SUFFIX = `Respond STRICTLY in the following JSON format:
 {
@@ -39,14 +45,19 @@ Do NOT include markdown. Return raw JSON.`;
 export async function analyzeStructureHandler(req: Request, res: Response) {
   try {
     if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: "GEMINI_API_KEY is not defined" });
+      return res.status(503).json({ error: "Assistant is not configured" });
+    }
+
+    const parsedInput = assistantInputSchema.safeParse(req.body);
+    if (!parsedInput.success) {
+      return res.status(400).json({ error: "Invalid request body" });
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const prompt = `${STRUCTURAL_ASSISTANT_SYSTEM}
 
 Input Data:
-${JSON.stringify(req.body, null, 2)}
+${JSON.stringify({ description: parsedInput.data.description }, null, 2)}
 
 ${PROMPT_SUFFIX}`;
 
@@ -67,11 +78,7 @@ ${PROMPT_SUFFIX}`;
 
     const parsed = assistantResponseSchema.safeParse(raw);
     if (!parsed.success) {
-      return res.status(502).json({
-        error: "Model JSON failed schema validation",
-        details: parsed.error.flatten(),
-        raw,
-      });
+      return res.status(502).json({ error: "Model JSON failed schema validation" });
     }
 
     let data = parsed.data;
@@ -93,10 +100,6 @@ ${PROMPT_SUFFIX}`;
     res.json(data);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: String(err) });
+    sendSafeError(res, err, 500, "Assistant request failed");
   }
-}
-
-export function registerAssistantRoute(app: Express) {
-  app.post("/api/analyze-structure", analyzeStructureHandler);
 }

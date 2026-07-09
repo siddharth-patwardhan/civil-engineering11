@@ -20,10 +20,11 @@ reportsRouter.get("/boq/:versionId/pdf", async (req, res) => {
     });
 
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    const safeName = filename.replace(/[^\w.\-]/g, "_");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
     res.send(pdf);
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: status < 500 ? (e as Error).message : "Failed to generate report" });
   }
 });

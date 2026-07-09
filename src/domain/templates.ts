@@ -93,6 +93,30 @@ export const ELEMENT_TEMPLATES: ElementTemplate[] = [
     },
   },
   {
+    key: "rebar_dia_mm",
+    label: "Rebar — weight from dia (mm) × length (m)",
+    defaults: {
+      desc: "HYSD bar T16 — weight calc D²/162×L",
+      unit: "rebar",
+      no: "16",
+      l: "12",
+      w: "",
+      h: "",
+    },
+  },
+  {
+    key: "formwork_area",
+    label: "Formwork / shuttering (m²)",
+    defaults: {
+      desc: "Timber formwork to soffit",
+      unit: "m²",
+      no: "1",
+      l: "4",
+      w: "5",
+      h: "",
+    },
+  },
+  {
     key: "rebar_by_tonne",
     label: "Reinforcement (tonne — qty in No.)",
     defaults: {

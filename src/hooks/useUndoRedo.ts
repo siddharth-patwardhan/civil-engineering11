@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 interface UndoRedoState<T> {
   past: T[];
@@ -6,7 +6,7 @@ interface UndoRedoState<T> {
   future: T[];
 }
 
-export function useUndoRedo<T>(initial: T, maxHistory = 50) {
+export function useUndoRedo<T>(initial: T, maxHistory = 50, syncKey?: string | number) {
   const [state, setState] = useState<UndoRedoState<T>>({
     past: [],
     present: initial,
@@ -15,6 +15,16 @@ export function useUndoRedo<T>(initial: T, maxHistory = 50) {
 
   const stateRef = useRef(state);
   stateRef.current = state;
+
+  // Reset undo stack when external source changes (e.g. project switch / server pull)
+  const syncRef = useRef(syncKey);
+  useEffect(() => {
+    if (syncKey === undefined) return;
+    if (syncRef.current !== syncKey) {
+      syncRef.current = syncKey;
+      setState({ past: [], present: initial, future: [] });
+    }
+  }, [syncKey, initial]);
 
   const set = useCallback(
     (next: T | ((prev: T) => T)) => {

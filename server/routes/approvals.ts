@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { safeErrorMessage } from "../security/httpErrors.js";
 import { Router } from "express";
 import { approvalTransitionSchema } from "../../src/domain/schemas.js";
 import { requirePrisma } from "../db.js";
@@ -20,7 +21,7 @@ approvalsRouter.get("/", async (req, res) => {
     res.json({ approvals: rows });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });
 
@@ -65,6 +66,6 @@ approvalsRouter.patch("/:entityType/:entityId", async (req, res) => {
     res.json({ approval });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
-    res.status(status).json({ error: String(e) });
+    res.status(status).json({ error: safeErrorMessage(e) });
   }
 });

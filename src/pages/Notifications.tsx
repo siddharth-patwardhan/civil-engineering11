@@ -1,17 +1,19 @@
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/services/api";
+import { useAuth } from "@/features/auth/AuthProvider";
 
 type NotifRow = { id: string; title: string; body: string; read: boolean; createdAt: string };
 
 export default function Notifications() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
   const qc = useQueryClient();
 
-  const { data, isError, error } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => api.fetch<{ notifications: NotifRow[] }>("/api/notifications"),
-    enabled: Boolean(api.getToken()),
+    enabled: isAuthenticated,
   });
 
   const markRead = useMutation({
@@ -50,6 +52,10 @@ export default function Notifications() {
           Mark All as Read
         </button>
       </div>
+
+      {isLoading && (
+        <p className="text-text-secondary">Loading notifications...</p>
+      )}
 
       {isError && (
         <p className="text-error text-sm">

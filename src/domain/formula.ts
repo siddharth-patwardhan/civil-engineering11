@@ -1,4 +1,5 @@
 import type { MeasureRowInput } from "./schemas";
+import { isAreaUnit, isLinearUnit, isMassUnit, isVolumeUnit } from "./schemas";
 
 export type FormulaOp = "volume" | "area" | "count" | "steel_weight" | "linear";
 
@@ -21,7 +22,6 @@ function parseNum(s: string | null | undefined): number | null {
 
 /**
  * Resolves quantity from explicit dimensions — no silent default of 1 for missing L/W/H.
- * For volume: all of no, l, w, h must be provided (or no alone for count-only lines).
  */
 export function resolveQuantityStrict(
   row: Pick<MeasureRowInput, "no" | "l" | "w" | "h" | "unit">,
@@ -52,7 +52,7 @@ export function resolveQuantityStrict(
     }
     return {
       ok: false,
-      error: "For r.m./m: enter No. × Length, or No. only for a direct quantity/count.",
+      error: "For length units: enter No. × Length, or No. only for a direct quantity.",
     };
   }
 
@@ -71,14 +71,14 @@ export function resolveQuantityStrict(
     if (no == null || l == null) {
       return {
         ok: false,
-        error: "Steel weight requires diameter (D as no) and length (L).",
+        error: "Rebar weight requires diameter (D as No. in mm) and length (L in m).",
       };
     }
     const wKg = (no * no) / 162 * l;
     return {
       ok: true,
       quantity: wKg,
-      trace: { op, inputs: { no, l }, formula: "(D^2/162)*L" },
+      trace: { op, inputs: { no, l }, formula: "(D²/162)*L kg" },
     };
   }
 
@@ -132,11 +132,28 @@ export function resolveQuantityStrict(
 
 /** Map unit to formula op (dims must match the physical meaning of the unit). */
 export function defaultOpForUnit(unit: string): FormulaOp {
-  if (unit === "m²" || unit === "sft") return "area";
-  if (unit === "m" || unit === "rm") return "linear";
-  if (unit === "nos" || unit === "kg" || unit === "t" || unit === "bag" || unit === "ls" || unit === "job") {
+  if (unit === "rebar") return "steel_weight";
+  if (isAreaUnit(unit)) return "area";
+  if (isLinearUnit(unit)) return "linear";
+  if (isMassUnit(unit)) return "count";
+  if (
+    unit === "nos" ||
+    unit === "each" ||
+    unit === "set" ||
+    unit === "pair" ||
+    unit === "lot" ||
+    unit === "bag" ||
+    unit === "roll" ||
+    unit === "sheet" ||
+    unit === "bundle" ||
+    unit === "ls" ||
+    unit === "job" ||
+    unit === "hour" ||
+    unit === "day" ||
+    unit === "litre"
+  ) {
     return "count";
   }
-  if (unit === "m³" || unit === "cum") return "volume";
+  if (isVolumeUnit(unit)) return "volume";
   return "volume";
 }
