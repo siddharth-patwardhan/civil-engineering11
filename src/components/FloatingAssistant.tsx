@@ -43,8 +43,9 @@ export function FloatingAssistant({ context = "general" }: FloatingAssistantProp
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-[70] w-12 h-12 rounded-full bg-accent-primary text-white shadow-lg hover:bg-accent-primary-dim transition-colors flex items-center justify-center"
+          className="fixed z-[70] w-12 h-12 rounded-full bg-accent-primary text-white shadow-lg hover:bg-accent-primary-dim transition-colors flex items-center justify-center right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] sm:right-6 sm:bottom-6"
           title="AI Assistant"
+          aria-label="Open AI Assistant"
         >
           <span className="material-symbols-outlined fill">smart_toy</span>
         </button>
@@ -52,7 +53,7 @@ export function FloatingAssistant({ context = "general" }: FloatingAssistantProp
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed bottom-6 right-6 z-[70] w-[380px] max-h-[600px] bg-bg-surface border border-border-default rounded-xl shadow-2xl flex flex-col overflow-hidden animate-scale-in">
+        <div className="fixed z-[70] flex flex-col overflow-hidden animate-scale-in bg-bg-surface border border-border-default shadow-2xl inset-x-0 bottom-0 max-h-[min(85dvh,600px)] rounded-t-xl sm:inset-auto sm:bottom-6 sm:right-6 sm:w-[min(380px,calc(100vw-2rem))] sm:max-h-[600px] sm:rounded-xl pb-safe">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-default bg-bg-elevated">
             <div className="flex items-center gap-2">
@@ -69,7 +70,7 @@ export function FloatingAssistant({ context = "general" }: FloatingAssistantProp
           </div>
 
           {/* Messages */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[300px] max-h-[400px]">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto touch-scroll-y p-4 space-y-3 min-h-[200px] max-h-[min(50dvh,400px)] sm:min-h-[300px] sm:max-h-[400px]">
             {messages.map((msg, i) => (
               <div
                 key={i}

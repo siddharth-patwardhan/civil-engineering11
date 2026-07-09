@@ -47,8 +47,8 @@ export function DataTable<T>({
   );
 
   return (
-    <div className={cn("w-full overflow-auto border border-border-default rounded-lg bg-bg-surface", className)}>
-      <table className="w-full border-collapse">
+    <div className={cn("w-full overflow-auto touch-scroll table-scroll-hint border border-border-default rounded-lg bg-bg-surface", className)}>
+      <table className="w-full border-collapse" style={{ minWidth: columns.reduce((sum, c) => sum + (typeof c.width === "number" ? c.width : 80), 0) }}>
         <thead className="sticky top-0 z-10">
           <tr className="bg-bg-elevated border-b border-border-default">
             {columns.map((col) => (

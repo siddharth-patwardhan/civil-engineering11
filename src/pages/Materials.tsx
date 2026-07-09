@@ -138,7 +138,7 @@ export default function Materials() {
   return (
     <>
       <section className="flex flex-col gap-stack-md">
-        <div className="flex justify-between items-end">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-stack-md">
           <div>
             <h2 className="font-headline-lg text-headline-lg text-on-surface">Material Library</h2>
             <p className="font-body-md text-body-md text-on-surface-variant mt-1">
@@ -153,7 +153,7 @@ export default function Materials() {
                 setForm(EMPTY_FORM);
                 setShowForm((v) => !v);
               }}
-              className="h-touch-target-min px-gutter bg-secondary text-on-secondary rounded-xl flex items-center justify-center gap-2 font-table-data text-table-data font-bold hover:bg-primary transition-colors shadow-sm whitespace-nowrap"
+              className="h-touch-target-min px-gutter bg-secondary text-on-secondary rounded-xl flex items-center justify-center gap-2 font-table-data text-table-data font-bold hover:bg-primary transition-colors shadow-sm whitespace-nowrap w-full sm:w-auto"
             >
               <span className="material-symbols-outlined">add</span>
               Add Material

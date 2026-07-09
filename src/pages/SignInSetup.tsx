@@ -116,7 +116,7 @@ export default function SignInSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex flex-col items-center py-stack-lg px-margin-mobile">
+    <div className="min-h-screen min-h-[100dvh] bg-surface flex flex-col items-center py-stack-lg px-margin-mobile px-safe pb-safe">
       <div className="w-full max-w-2xl">
         <div className="mb-stack-lg text-center">
           <span className="material-symbols-outlined text-primary text-[40px] mb-stack-sm">settings_account_box</span>

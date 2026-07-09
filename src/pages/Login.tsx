@@ -39,7 +39,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex antialiased bg-background">
+    <div className="min-h-screen min-h-[100dvh] flex antialiased bg-background">
       <div className="hidden lg:flex lg:w-1/2 relative bg-surface-container-high items-center justify-center overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center opacity-10 bg-primary-container" />
         <div className="absolute inset-0 bg-gradient-to-br from-primary-container/90 to-surface/40 mix-blend-multiply"></div>
@@ -52,8 +52,17 @@ export default function Login() {
         </div>
       </div>
 
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-margin-mobile relative bg-surface">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-margin-mobile relative bg-surface px-safe">
         <div className="w-full max-w-[420px] flex flex-col">
+          <div className="lg:hidden flex items-center gap-3 mb-stack-md pt-safe">
+            <div className="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center">
+              <span className="material-symbols-outlined text-on-primary-container fill">architecture</span>
+            </div>
+            <div>
+              <p className="font-label-caps text-label-caps text-on-surface-variant">Civil Est Pro</p>
+              <p className="font-body-md text-body-md text-on-surface">Precision in every estimate</p>
+            </div>
+          </div>
           <div className="mb-stack-lg text-center lg:text-left mt-stack-lg lg:mt-0">
             <h2 className="font-headline-lg text-headline-lg text-on-surface mb-stack-sm">Access Portal</h2>
             <p className="font-body-md text-body-md text-on-surface-variant">Sign in to configure your company and start estimating.</p>

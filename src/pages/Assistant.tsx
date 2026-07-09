@@ -71,7 +71,7 @@ export default function Assistant() {
   };
 
   return (
-    <div className="flex flex-col gap-stack-lg max-w-4xl mx-auto w-full pb-20">
+    <div className="flex flex-col gap-stack-lg max-w-4xl mx-auto w-full pb-20 pb-safe">
       <div className="bg-surface-container border border-outline-variant rounded-xl p-stack-lg flex flex-col gap-stack-md">
         <h2 className="font-headline-md text-headline-md text-primary flex items-center gap-2">
           <span className="material-symbols-outlined">smart_toy</span>

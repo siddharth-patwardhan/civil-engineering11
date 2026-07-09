@@ -377,30 +377,30 @@ export default function MeasurementNew() {
             {projectData?.project?.name ?? "Measurement Book"}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto touch-scroll pb-1 -mx-1 px-1 w-full sm:w-auto flex-nowrap sm:flex-wrap">
           {activeProjectId && autoSaveStatus !== "idle" && (
-            <span className="text-[11px] text-text-muted font-label">
+            <span className="text-[11px] text-text-muted font-label shrink-0">
               {autoSaveStatus === "saving" ? "Saving..." : "Auto-saved"}
             </span>
           )}
           <button
             onClick={undo}
             disabled={!canUndo}
-            className="h-8 px-3 rounded-lg border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 transition-colors font-table text-table"
+            className="h-10 sm:h-8 px-3 rounded-lg border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 transition-colors font-table text-table shrink-0"
           >
             Undo
           </button>
           <button
             onClick={redo}
             disabled={!canRedo}
-            className="h-8 px-3 rounded-lg border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 transition-colors font-table text-table"
+            className="h-10 sm:h-8 px-3 rounded-lg border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 transition-colors font-table text-table shrink-0"
           >
             Redo
           </button>
           <button
             onClick={() => void syncToServer()}
             disabled={isSaving || !activeProjectId}
-            className="h-8 px-3 rounded-lg bg-accent-primary text-white font-table text-table hover:bg-accent-primary-dim transition-colors disabled:opacity-50 flex items-center gap-2"
+            className="h-10 sm:h-8 px-3 rounded-lg bg-accent-primary text-white font-table text-table hover:bg-accent-primary-dim transition-colors disabled:opacity-50 flex items-center gap-2 shrink-0"
           >
             {isSaving ? "Saving..." : "Save"}
           </button>
@@ -436,10 +436,10 @@ export default function MeasurementNew() {
           ))}
         </select>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
           <button
             onClick={addRow}
-            className="h-9 px-3 rounded-lg border border-border-default text-text-primary font-table text-table hover:bg-bg-hover transition-colors flex items-center gap-2"
+            className="h-10 sm:h-9 px-3 rounded-lg border border-border-default text-text-primary font-table text-table hover:bg-bg-hover transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none min-w-[120px]"
           >
             <span className="material-symbols-outlined text-[18px]">add</span>
             Add Row
@@ -447,7 +447,7 @@ export default function MeasurementNew() {
           <button
             onClick={() => void goToBoq()}
             disabled={!activeProjectId}
-            className="h-9 px-3 rounded-lg bg-accent-primary text-white font-table text-table hover:bg-accent-primary-dim transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="h-10 sm:h-9 px-3 rounded-lg bg-accent-primary text-white font-table text-table hover:bg-accent-primary-dim transition-colors flex items-center justify-center gap-2 disabled:opacity-50 flex-1 sm:flex-none min-w-[140px]"
           >
             Review BOQ
             <span className="material-symbols-outlined text-[18px]">arrow_forward</span>

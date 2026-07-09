@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { VirtualDataTable } from "@/components/VirtualDataTable";
+import { MobileBoqForm } from "@/components/MobileBoqForm";
 import { type Column } from "@/components/DataTable";
 import { UnitCombobox } from "@/components/UnitCombobox";
 import { showToast } from "@/components/ToastProvider";
@@ -261,11 +262,14 @@ export default function BOQNew() {
   }, [activeProjectId, isLoading, boqData?.versions.length, createVersion.isPending]);
 
   useEffect(() => {
-    if (versions.length >= 2 && !diffVersionA && !diffVersionB) {
-      setDiffVersionA(versions[1].id);
-      setDiffVersionB(versions[0].id);
+    if (lines.length === 0) {
+      setSelectedBoqLineId("");
+      return;
     }
-  }, [versions, diffVersionA, diffVersionB]);
+    if (!selectedBoqLineId || !lines.some((l) => l.id === selectedBoqLineId)) {
+      setSelectedBoqLineId(lines[0]?.id ?? "");
+    }
+  }, [lines, selectedBoqLineId]);
 
   const subtotal = useMemo(() => lines.reduce((sum, l) => sum + l.amount, 0), [lines]);
   const contingency = subtotal * 0.05;
@@ -440,7 +444,7 @@ export default function BOQNew() {
             Detailed line-item breakdown for cost estimation and material procurement
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto overflow-x-auto touch-scroll pb-1 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
           <button
             onClick={undo}
             disabled={!canUndo}
@@ -698,6 +702,16 @@ export default function BOQNew() {
         keyExtractor={(row) => row.id}
         emptyMessage="No BOQ items. Save measurements and generate from Measurement Book."
         maxHeight={560}
+        className="hidden lg:block"
+      />
+
+      <MobileBoqForm
+        lines={lines}
+        selectedId={selectedBoqLineId}
+        onSelect={setSelectedBoqLineId}
+        onUpdate={updateLine}
+        onAdd={addLine}
+        onDelete={deleteLine}
       />
 
       <div className="flex justify-end">

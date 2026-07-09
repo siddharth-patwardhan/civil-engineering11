@@ -65,17 +65,17 @@ export default function Dashboard() {
             Real-time estimations and cost tracking for active sites
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap w-full sm:w-auto">
           <button
             onClick={() => navigate("/create-project")}
-            className="h-9 px-4 rounded-lg bg-accent-primary text-white font-table text-table hover:bg-accent-primary-dim transition-colors flex items-center gap-2"
+            className="h-10 sm:h-9 px-4 rounded-lg bg-accent-primary text-white font-table text-table hover:bg-accent-primary-dim transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none min-w-[140px]"
           >
             <span className="material-symbols-outlined text-[18px]">add</span>
             New Project
           </button>
           <button
             onClick={() => navigate(projectPathOrLegacy(activeProjectId, "boq"))}
-            className="h-9 px-4 rounded-lg border border-border-default text-text-primary font-table text-table hover:bg-bg-hover transition-colors"
+            className="h-10 sm:h-9 px-4 rounded-lg border border-border-default text-text-primary font-table text-table hover:bg-bg-hover transition-colors flex-1 sm:flex-none min-w-[120px]"
           >
             Import BOQ
           </button>
@@ -159,8 +159,8 @@ export default function Dashboard() {
             View all
           </button>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
+        <div className="overflow-x-auto touch-scroll">
+          <table className="w-full min-w-[640px]">
             <thead>
               <tr className="bg-bg-elevated border-b border-border-default">
                 <th scope="col" className="px-4 py-2 font-label text-label text-text-secondary text-left">Project</th>
