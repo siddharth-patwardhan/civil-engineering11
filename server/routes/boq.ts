@@ -195,14 +195,14 @@ boqRouter.put("/versions/:versionId/lines", async (req, res) => {
     });
     res.json({
       version: {
-        id: updated!.id,
-        version: updated!.version,
-        label: updated!.label,
-        lines: updated!.lines.map((l) => ({
-          id: l.id,
-          itemNo: l.itemNo,
-          description: l.description,
-          unit: l.unit,
+        id: String(updated!.id),
+        version: Number(updated!.version),
+        label: updated!.label ? String(updated!.label) : null,
+        lines: (updated!.lines as any[]).map((l: any) => ({
+          id: String(l.id),
+          itemNo: String(l.itemNo),
+          description: String(l.description),
+          unit: String(l.unit),
           quantity: Number(l.quantity),
           rate: Number(l.rate),
           amount: Number(l.amount),
@@ -237,23 +237,25 @@ boqRouter.get("/versions/:a/diff/:b", async (req, res) => {
       removed: [] as string[],
       changed: [] as { itemNo: string; field: string; from: string; to: string }[],
     };
-    const mapA = new Map(va.lines.map((l) => [l.itemNo, l]));
-    const mapB = new Map(vb.lines.map((l) => [l.itemNo, l]));
-    for (const [no, lb] of mapB) {
-      const la = mapA.get(no);
-      if (!la) diff.added.push(no);
+    const mapA = new Map((va.lines as any[]).map((l: any) => [String(l.itemNo), l]));
+    const mapB = new Map((vb.lines as any[]).map((l: any) => [String(l.itemNo), l]));
+    for (const [no, lb] of mapB.entries()) {
+      const itemNo = String(no);
+      const la = mapA.get(itemNo);
+      if (!la) diff.added.push(itemNo);
       else {
         for (const f of ["quantity", "rate", "amount", "description"] as const) {
-          const av = String(la[f]);
-          const bv = String(lb[f]);
+          const av = String((la as Record<string, unknown>)[f] ?? "");
+          const bv = String((lb as Record<string, unknown>)[f] ?? "");
           if (av !== bv) {
-            diff.changed.push({ itemNo: no, field: f, from: av, to: bv });
+            diff.changed.push({ itemNo, field: f, from: av, to: bv });
           }
         }
       }
     }
     for (const no of mapA.keys()) {
-      if (!mapB.has(no)) diff.removed.push(no);
+      const itemNo = String(no);
+      if (!mapB.has(itemNo)) diff.removed.push(itemNo);
     }
     res.json({ diff });
   } catch (e) {
