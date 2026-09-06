@@ -66,9 +66,92 @@ export interface GovernmentMaterialRule {
 }
 
 /**
- * Standard Government DSR / IS Code Material Rules catalog
+ * Standard Government DSR / Maharashtra PWD / IS Code Material Rules catalog
  */
 export const GOVERNMENT_DSR_MATERIAL_BUNDLE: GovernmentMaterialRule[] = [
+  // Maharashtra PWD State Schedule Rates
+  {
+    code: "MH-PWD-3.01",
+    name: "OPC 53 Grade Cement (Maharashtra PWD)",
+    category: "Concrete & Masonry",
+    unit: "bag",
+    baseRate: 380,
+    spec: "Conforming to IS 269:2015 Clause 5.1 (Nashik/Mumbai Circle Rate)",
+    isStandardRef: "IS 269:2015 Clause 5.1",
+    governmentSchedule: "Maharashtra PWD SSR Item 3.01",
+  },
+  {
+    code: "MH-PWD-3.02",
+    name: "Portland Pozzolana Cement PPC (Maharashtra PWD)",
+    category: "Concrete & Masonry",
+    unit: "bag",
+    baseRate: 350,
+    spec: "Conforming to IS 1489 (Part 1):2015",
+    isStandardRef: "IS 1489:2015",
+    governmentSchedule: "Maharashtra PWD SSR Item 3.02",
+  },
+  {
+    code: "MH-PWD-5.22",
+    name: "TMT Steel Fe-500D Reinforcement Bars (Maha PWD)",
+    category: "Metals & Steel",
+    unit: "kg",
+    baseRate: 68.5,
+    spec: "High yield strength deformed bars conforming to IS 1786:2008 Grade Fe500D",
+    isStandardRef: "IS 1786:2008 Clause 6.1",
+    governmentSchedule: "Maharashtra PWD SSR Item 5.22",
+  },
+  {
+    code: "MH-PWD-3.05",
+    name: "Coarse Aggregate 20mm Crushed Basalt (Maha PWD)",
+    category: "Aggregates",
+    unit: "m³",
+    baseRate: 1180,
+    spec: "Crushed hard basalt stone aggregate conforming to IS 383:2016 Table 2",
+    isStandardRef: "IS 383:2016 Table 2",
+    governmentSchedule: "Maharashtra PWD SSR Item 3.05",
+  },
+  {
+    code: "MH-PWD-3.08",
+    name: "Natural River Sand Zone II (Maharashtra PWD / MJP)",
+    category: "Aggregates",
+    unit: "m³",
+    baseRate: 1750,
+    spec: "Naturally well-graded river sand conforming to IS 383:2016 Zone II",
+    isStandardRef: "IS 383:2016 Zone II",
+    governmentSchedule: "Maharashtra PWD SSR Item 3.08 / MJP Item 47",
+  },
+  {
+    code: "MH-PWD-3.09",
+    name: "Manufactured Sand M-Sand (Maharashtra PWD)",
+    category: "Aggregates",
+    unit: "m³",
+    baseRate: 1400,
+    spec: "Crushed stone sand as per IS 383:2016 for concrete",
+    isStandardRef: "IS 383:2016 Clause 4.2",
+    governmentSchedule: "Maharashtra PWD SSR Item 3.09",
+  },
+  {
+    code: "MH-PWD-6.01",
+    name: "First Class Burnt Clay Bricks 10 N/mm² (Maha PWD)",
+    category: "Concrete & Masonry",
+    unit: "1000 nos",
+    baseRate: 7800,
+    spec: "Compressive strength not less than 10 N/mm² conforming to IS 1077:1992",
+    isStandardRef: "IS 1077:1992 Table 1",
+    governmentSchedule: "Maharashtra PWD SSR Item 6.01",
+  },
+  {
+    code: "MH-PWD-4.13",
+    name: "Ready Mix Concrete M25 Grade (Maha PWD)",
+    category: "Concrete & Masonry",
+    unit: "m³",
+    baseRate: 4250,
+    spec: "Design mix concrete M25 as per IS 456:2000 and IS 4926",
+    isStandardRef: "IS 456:2000 Cl 9.2",
+    governmentSchedule: "Maharashtra PWD SSR Item 4.13",
+  },
+
+  // CPWD Delhi Schedule Rates
   {
     code: "CPWD-DSR-3.1",
     name: "Ordinary Portland Cement (OPC 53 Grade)",
@@ -230,10 +313,7 @@ export function parseMaterialTextOrPdf(rawText: string): GovernmentMaterialRule[
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    // Regex matching item code, name, unit, rate
-    // e.g. "ITEM-101 OPC 53 Grade Cement bag 420.00 IS 269:2015"
-    // e.g. "DSR-3.1 Cement OPC 53 bag Rs 380"
-    const match = line.match(/(?:item|code|dsr|is)?[:\s]*([A-Z0-9.\/-]+)\s+([A-Za-z0-9\s(),.\-–]+?)\s+(?:unit[:\s]*)?(bag|kg|m³|m2|m²|m|cum|sqm|tonne|litre|liter|piece|nos|1000 nos)\s+(?:rs\.?|₹)?\s*([0-9,]+(?:\.[0-9]+)?)/i);
+    const match = line.match(/(?:item|code|dsr|is|mh-pwd)?[:\s]*([A-Z0-9.\/-]+)\s+([A-Za-z0-9\s(),.\-–]+?)\s+(?:unit[:\s]*)?(bag|kg|m³|m2|m²|m|cum|sqm|tonne|litre|liter|piece|nos|1000 nos)\s+(?:rs\.?|₹)?\s*([0-9,]+(?:\.[0-9]+)?)/i);
 
     if (match) {
       const code = match[1].toUpperCase();
