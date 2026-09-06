@@ -92,6 +92,26 @@ describe("materialCostEngine", () => {
     expect(parsed[5].unit).toBe("m²");
   });
 
+  it("filters out noisy UI metadata text like temp, MonthlyINR, dates, and active status", () => {
+    const noisyText = `
+      temp
+      TEMP
+      5 components
+      MonthlyINR
+      30
+      Jul 01, 2026
+      Active
+      [MH-PWD-MAT-01] Ordinary Portland Cement (OPC 53 Grade) | Unit: bag (50kg) | Base Rate: Rs.380 | Nashik: Rs.390 | Ref: Maharashtra PWD SSR
+    `;
+
+    const parsed = parseMaterialTextOrPdf(noisyText);
+    expect(parsed.length).toBe(1);
+    expect(parsed[0].code).toBe("MH-PWD-MAT-01");
+    expect(parsed[0].name).toBe("Ordinary Portland Cement (OPC 53 Grade)");
+    expect(parsed[0].unit).toBe("bag");
+    expect(parsed[0].baseRate).toBe(380);
+  });
+
   it("includes valid government DSR material bundle items", () => {
     expect(GOVERNMENT_DSR_MATERIAL_BUNDLE.length).toBeGreaterThan(10);
     const opc = GOVERNMENT_DSR_MATERIAL_BUNDLE.find((m) => m.code === "CPWD-DSR-3.1");

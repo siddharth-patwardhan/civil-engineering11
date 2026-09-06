@@ -66,6 +66,22 @@ export interface GovernmentMaterialRule {
 }
 
 /**
+ * Valid civil engineering measurement units whitelist
+ */
+export const VALID_CIVIL_UNITS = new Set([
+  "m³",
+  "m²",
+  "m",
+  "kg",
+  "bag",
+  "nos",
+  "1000 nos",
+  "tonne",
+  "litre",
+  "quintal",
+]);
+
+/**
  * Standard Government DSR / Maharashtra PWD / IS Code Material Rules catalog
  */
 export const GOVERNMENT_DSR_MATERIAL_BUNDLE: GovernmentMaterialRule[] = [
@@ -307,19 +323,20 @@ export const GOVERNMENT_DSR_MATERIAL_BUNDLE: GovernmentMaterialRule[] = [
 /**
  * Helper to normalize unit text into standard measurement units
  */
-export function normalizeUnitString(rawUnit: string): string {
+export function normalizeUnitString(rawUnit: string): string | null {
+  if (!rawUnit) return null;
   const u = rawUnit.toLowerCase().trim();
   if (u.includes("bag")) return "bag";
   if (u.includes("cubic m") || u.includes("m3") || u.includes("m³") || u.includes("cum") || u.includes("m´‡") || u.includes("m´")) return "m³";
   if (u.includes("square m") || u.includes("m2") || u.includes("m²") || u.includes("sqm") || u.includes("m´†")) return "m²";
   if (u.includes("metric ton") || u.includes("tonne") || u.includes("mt")) return "tonne";
   if (u.includes("1000")) return "1000 nos";
-  if (u.includes("num") || u.includes("nos") || u.includes("each") || u.includes("per no")) return "nos";
+  if (u.includes("num") || u.includes("nos") || u.includes("each") || u.includes("per no") || u.includes("number")) return "nos";
   if (u.includes("kilo") || u.includes("kg")) return "kg";
   if (u.includes("litr") || u.includes("litre") || u.includes("liter") || u.includes("ltr")) return "litre";
   if (u.includes("quintal")) return "quintal";
-  if (u.includes("running") || u.includes("rmt") || u.includes("rm")) return "m";
-  return rawUnit.trim();
+  if (u.includes("running") || u.includes("rmt") || u.includes("rm") || u === "m" || u === "metre" || u === "meter") return "m";
+  return null;
 }
 
 /**
@@ -384,9 +401,10 @@ export function parseMaterialTextOrPdf(rawText: string): GovernmentMaterialRule[
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Skip table header / metadata lines without material units
+    // Filter out metadata noise, status lines, temp text, dates, component headers
     if (
-      line.match(/^(page\s+\d+|state\s+schedule|government\s+of|public\s+works\s+department|table\s+of\s+contents|index|chapter|\d{4}-\d{2})/i) ||
+      line.match(/^(temp|active|monthlyinr|\d+\s*components|jul|aug|sep|oct|nov|dec|jan|feb|mar|apr|may|jun)/i) ||
+      line.match(/^(status|page\s+\d+|state\s+schedule|government\s+of|public\s+works\s+department|table\s+of\s+contents|index|chapter|\d{4}-\d{2})/i) ||
       line.match(/^(sr\.?\s*no|item\s+no|description|unit|rate\s*\(in\s*rs\)|gst\s*\(in\s*rs\))/i) ||
       (line.match(/schedule|department|government|catalog|dsr/i) && !line.match(new RegExp(UNIT_PATTERN, "i")) && !line.match(/Unit:/i))
     ) {
@@ -404,12 +422,15 @@ export function parseMaterialTextOrPdf(rawText: string): GovernmentMaterialRule[
       const rate = parseFloat(kvMatch[4].replace(/,/g, ""));
       const spec = kvMatch[5]?.replace(/\|/g, "").trim();
 
-      if (!isNaN(rate) && rate > 0 && rawName.length >= 2) {
+      const unit = normalizeUnitString(rawUnit);
+
+      if (!isNaN(rate) && rate > 0 && rawName.length >= 3 && unit && VALID_CIVIL_UNITS.has(unit)) {
+        if (rawName.match(/^(temp|active|monthlyinr|\d+\s*components)/i)) continue;
+
         let code = rawCode.match(/^(MH|CPWD|DSR|ITEM|SSR)/i) ? rawCode.toUpperCase() : `MH-PWD-${rawCode.toUpperCase()}`;
         if (codeSet.has(code)) code = `${code}-${items.length + 1}`;
         codeSet.add(code);
 
-        const unit = normalizeUnitString(rawUnit);
         const category = inferMaterialCategory(`${rawName} ${spec ?? ""}`);
 
         items.push({
@@ -435,7 +456,11 @@ export function parseMaterialTextOrPdf(rawText: string): GovernmentMaterialRule[
       const rate = parseFloat(lineMatch[4].replace(/,/g, ""));
       const spec = lineMatch[5]?.trim();
 
-      if (!isNaN(rate) && rate > 0 && rawDesc.length >= 2) {
+      const unit = normalizeUnitString(rawUnit);
+
+      if (!isNaN(rate) && rate > 0 && rawDesc.length >= 3 && unit && VALID_CIVIL_UNITS.has(unit)) {
+        if (rawDesc.match(/^(temp|active|monthlyinr|\d+\s*components)/i)) continue;
+
         let code = rawCode.match(/^(MH|CPWD|DSR|ITEM|SSR)/i) ? rawCode.toUpperCase() : `MH-PWD-${rawCode.toUpperCase()}`;
         if (codeSet.has(code)) code = `${code}-${items.length + 1}`;
         codeSet.add(code);
@@ -443,7 +468,6 @@ export function parseMaterialTextOrPdf(rawText: string): GovernmentMaterialRule[
         let name = rawDesc.replace(/\s+/g, " ").trim();
         if (name.length > 120) name = name.slice(0, 117) + "…";
 
-        const unit = normalizeUnitString(rawUnit);
         const category = inferMaterialCategory(`${rawDesc} ${spec ?? ""}`);
 
         items.push({
@@ -470,7 +494,11 @@ export function parseMaterialTextOrPdf(rawText: string): GovernmentMaterialRule[
         const rawUnit = multiMatch[3].trim();
         const rate = parseFloat(multiMatch[4].replace(/,/g, ""));
 
-        if (!isNaN(rate) && rate > 0) {
+        const unit = normalizeUnitString(rawUnit);
+
+        if (!isNaN(rate) && rate > 0 && unit && VALID_CIVIL_UNITS.has(unit)) {
+          if (rawDesc.match(/^(temp|active|monthlyinr|\d+\s*components)/i)) continue;
+
           let code = rawCode.match(/^(MH|CPWD|DSR|ITEM|SSR)/i) ? rawCode.toUpperCase() : `MH-PWD-${rawCode.toUpperCase()}`;
           if (codeSet.has(code)) code = `${code}-${items.length + 1}`;
           codeSet.add(code);
@@ -478,7 +506,6 @@ export function parseMaterialTextOrPdf(rawText: string): GovernmentMaterialRule[
           let name = rawDesc.replace(/\s+/g, " ").trim();
           if (name.length > 120) name = name.slice(0, 117) + "…";
 
-          const unit = normalizeUnitString(rawUnit);
           const category = inferMaterialCategory(`${rawDesc} ${name}`);
 
           items.push({
