@@ -1,12 +1,17 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/services/api";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { useActiveProjectId } from "@/features/project/useActiveProjectId";
+import { useProjectUiStore } from "@/features/project/projectUiStore";
 import { showToast } from "@/components/ToastProvider";
 import { UnitCombobox } from "@/components/UnitCombobox";
 import { formatInr } from "@/lib/formatCurrency";
-import { calculateRelativeMaterialCost } from "@/domain/materialCostEngine";
+import {
+  calculateRelativeMaterialCost,
+  parseMaterialTextOrPdf,
+  GOVERNMENT_DSR_MATERIAL_BUNDLE,
+} from "@/domain/materialCostEngine";
 import {
   MEASUREMENT_UNITS,
   MEASUREMENT_UNIT_LABELS,
@@ -42,6 +47,12 @@ interface MaterialRow {
   rateHistory?: RateHistoryItem[];
 }
 
+interface ProjectOption {
+  id: string;
+  name: string;
+  clientName?: string | null;
+}
+
 const EMPTY_FORM = {
   code: "",
   name: "",
@@ -62,7 +73,19 @@ const CATEGORY_OPTIONS = [
   "Miscellaneous",
 ];
 
-const SAMPLE_PDF_PRESET = `CPWD DSR Schedule 2023 / Government Rules Specification
+const MAHARASHTRA_PWD_PDF_PRESET = `GOVERNMENT OF MAHARASHTRA - PUBLIC WORKS DEPARTMENT
+State Schedule of Rates (SSR) & CPWD Civil Worksite Material Specifications 2026
+
+MH-PWD-3.01 OPC 53 Grade Cement bag 380.00 IS 269:2015 Clause 5.1
+MH-PWD-3.02 Portland Pozzolana Cement PPC bag 350.00 IS 1489:2015
+MH-PWD-5.22 TMT Steel Fe-500D Reinforcement Bars kg 68.50 IS 1786:2008 Grade Fe500D
+MH-PWD-3.05 Coarse Aggregate 20mm Crushed Basalt m³ 1180.00 IS 383:2016 Table 2
+MH-PWD-3.08 Natural River Sand Zone II m³ 1750.00 IS 383:2016 Zone II
+MH-PWD-3.09 Manufactured Sand M-Sand m³ 1400.00 IS 383:2016 Clause 4.2
+MH-PWD-6.01 First Class Burnt Clay Bricks 10 N/mm² 1000 nos 7800.00 IS 1077:1992
+MH-PWD-4.13 Ready Mix Concrete M25 Grade m³ 4250.00 IS 456:2000 & IS 4926`;
+
+const CPWD_DSR_PRESET = `CPWD Delhi Schedule of Rates (DSR 2023)
 CPWD-DSR-3.1 Ordinary Portland Cement (OPC 53) bag 380.00 IS 269:2015
 CPWD-DSR-5.22 TMT Steel Fe-500D Reinforcement Bars kg 68.00 IS 1786:2008
 CPWD-DSR-3.5 Coarse Aggregate 20mm Nominal Size m³ 1150.00 IS 383:2016
@@ -71,9 +94,31 @@ CPWD-DSR-6.1 First Class Burnt Clay Bricks 1000 nos 7500.00 IS 1077:1992
 CPWD-DSR-4.1.3 Ready Mix Concrete M25 Grade m³ 4100.00 IS 456:2000`;
 
 export default function Materials() {
-  const projectId = useActiveProjectId();
+  const activeProjectIdStore = useActiveProjectId();
+  const setActiveProjectIdStore = useProjectUiStore((s) => s.setActiveProjectId);
   const { isAuthenticated } = useAuth();
   const qc = useQueryClient();
+
+  // Fetch available projects to ensure a project is always active
+  const { data: projectsData } = useQuery({
+    queryKey: ["projects"],
+    queryFn: () => api.fetch<{ projects: ProjectOption[] }>("/api/projects"),
+    enabled: isAuthenticated,
+  });
+
+  const projects = projectsData?.projects ?? [];
+
+  // Default to first project if activeProjectIdStore is null
+  const projectId = activeProjectIdStore ?? projects[0]?.id ?? "44444444-4444-4444-8444-444444444444";
+
+  // Auto-set active project in store if missing
+  useEffect(() => {
+    if (!activeProjectIdStore && projects.length > 0) {
+      setActiveProjectIdStore(projects[0].id);
+    } else if (!activeProjectIdStore) {
+      setActiveProjectIdStore("44444444-4444-4444-8444-444444444444");
+    }
+  }, [activeProjectIdStore, projects, setActiveProjectIdStore]);
 
   const [activeTab, setActiveTab] = useState<"catalog" | "tool" | "importer" | "batch">("catalog");
   const [search, setSearch] = useState("");
@@ -89,14 +134,14 @@ export default function Materials() {
   const [toolSupplier, setToolSupplier] = useState<string>("Latest Market Supplier");
 
   // Importer State
-  const [pdfText, setPdfText] = useState<string>(SAMPLE_PDF_PRESET);
+  const [pdfText, setPdfText] = useState<string>(MAHARASHTRA_PWD_PDF_PRESET);
 
   // Batch Escalation State
   const [batchCategory, setBatchCategory] = useState<string>("");
   const [batchPercent, setBatchPercent] = useState<number>(5.0);
   const [batchSupplier, setBatchSupplier] = useState<string>("Q3 2026 Market Index Adjustment");
 
-  // Fetch materials list
+  // Fetch materials list for active project
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["materials", projectId],
     queryFn: () => api.fetch<{ materials: MaterialRow[] }>(`/api/projects/${projectId}/materials`),
@@ -111,7 +156,7 @@ export default function Materials() {
   }, [materials, selectedMatId]);
 
   // Set default selection when materials load
-  useMemo(() => {
+  useEffect(() => {
     if (!selectedMatId && materials.length > 0) {
       setSelectedMatId(materials[0].id);
       setToolCustomRate(materials[0].latestRate ?? materials[0].baseRate ?? 0);
@@ -130,6 +175,11 @@ export default function Materials() {
     });
   }, [selectedMaterial, toolCustomRate, toolQuantity, toolMultiplier]);
 
+  // Live parsed material table from PDF text
+  const parsedPdfItems = useMemo(() => {
+    return parseMaterialTextOrPdf(pdfText);
+  }, [pdfText]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return materials;
@@ -142,6 +192,22 @@ export default function Materials() {
         (m.spec ?? "").toLowerCase().includes(q),
     );
   }, [materials, search]);
+
+  // Handle file drop or upload in PDF importer
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        setPdfText(content);
+        showToast(`Loaded ${file.name}. Parsing extracted schedule items…`, "info");
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // Save single material
   const saveMaterial = useMutation({
@@ -291,49 +357,72 @@ export default function Materials() {
   return (
     <>
       <section className="flex flex-col gap-stack-md">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-stack-md">
-          <div>
-            <h2 className="font-headline-lg text-headline-lg text-on-surface">Material Library & Relative Costing</h2>
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-end gap-stack-md bg-surface-container-lowest p-gutter border border-outline-variant rounded-2xl shadow-sm">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[28px]">architecture</span>
+              <h2 className="font-headline-lg text-headline-lg text-on-surface">Material Library & Relative Costing</h2>
+            </div>
             <p className="font-body-md text-body-md text-on-surface-variant mt-1">
               Select materials, track volatile market costs relative to government standards (DSR), and import rule schedules from PDF.
             </p>
           </div>
-          {projectId && (
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => importGovernmentBundle.mutate()}
-                disabled={importGovernmentBundle.isPending}
-                className="h-touch-target-min px-4 bg-surface-container border border-outline text-primary rounded-xl flex items-center gap-2 font-table-data text-table-data hover:bg-surface-variant transition-colors shadow-sm disabled:opacity-50"
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Project Dropdown Selector */}
+            <div className="flex flex-col gap-1">
+              <span className="font-label-caps text-xs text-outline font-bold">Active Project</span>
+              <select
+                value={projectId}
+                onChange={(e) => setActiveProjectIdStore(e.target.value)}
+                className="h-touch-target-min px-3 bg-surface border border-outline-variant rounded-xl font-table-data text-table-data text-on-surface font-bold min-w-[200px]"
               >
-                <span className="material-symbols-outlined text-[18px]">account_balance</span>
-                {importGovernmentBundle.isPending ? "Importing…" : "Import Govt DSR Schedule"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(EMPTY_FORM);
-                  setShowForm((v) => !v);
-                }}
-                className="h-touch-target-min px-4 bg-secondary text-on-secondary rounded-xl flex items-center gap-2 font-table-data text-table-data font-bold hover:bg-primary transition-colors shadow-sm whitespace-nowrap"
-              >
-                <span className="material-symbols-outlined">add</span>
-                Add Custom Material
-              </button>
+                {projects.length > 0 ? (
+                  projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="44444444-4444-4444-8444-444444444444">Seed Civil Project</option>
+                )}
+              </select>
             </div>
-          )}
+
+            <button
+              type="button"
+              onClick={() => importGovernmentBundle.mutate()}
+              disabled={importGovernmentBundle.isPending}
+              className="h-touch-target-min px-4 bg-surface-container border border-outline text-primary rounded-xl flex items-center gap-2 font-table-data text-table-data hover:bg-surface-variant transition-colors shadow-sm disabled:opacity-50 mt-auto"
+            >
+              <span className="material-symbols-outlined text-[18px]">account_balance</span>
+              {importGovernmentBundle.isPending ? "Importing…" : "Import Govt DSR Schedule"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setEditingId(null);
+                setForm(EMPTY_FORM);
+                setShowForm((v) => !v);
+              }}
+              className="h-touch-target-min px-4 bg-secondary text-on-secondary rounded-xl flex items-center gap-2 font-table-data text-table-data font-bold hover:bg-primary transition-colors shadow-sm whitespace-nowrap mt-auto"
+            >
+              <span className="material-symbols-outlined">add</span>
+              Add Custom Material
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-outline-variant mt-2 overflow-x-auto">
+        <div className="flex border-b border-outline-variant mt-2 overflow-x-auto bg-surface-container-lowest rounded-xl p-1 shadow-sm">
           <button
             type="button"
             onClick={() => setActiveTab("catalog")}
-            className={`px-4 py-3 font-table-data text-table-data font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            className={`px-4 py-3 font-table-data text-table-data font-bold rounded-lg transition-colors whitespace-nowrap flex items-center gap-2 ${
               activeTab === "catalog"
-                ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                ? "bg-primary text-on-primary shadow-sm"
+                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low"
             }`}
           >
             <span className="material-symbols-outlined text-[20px]">inventory_2</span>
@@ -342,10 +431,10 @@ export default function Materials() {
           <button
             type="button"
             onClick={() => setActiveTab("tool")}
-            className={`px-4 py-3 font-table-data text-table-data font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            className={`px-4 py-3 font-table-data text-table-data font-bold rounded-lg transition-colors whitespace-nowrap flex items-center gap-2 ${
               activeTab === "tool"
-                ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                ? "bg-primary text-on-primary shadow-sm"
+                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low"
             }`}
           >
             <span className="material-symbols-outlined text-[20px]">tune</span>
@@ -354,10 +443,10 @@ export default function Materials() {
           <button
             type="button"
             onClick={() => setActiveTab("importer")}
-            className={`px-4 py-3 font-table-data text-table-data font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            className={`px-4 py-3 font-table-data text-table-data font-bold rounded-lg transition-colors whitespace-nowrap flex items-center gap-2 ${
               activeTab === "importer"
-                ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                ? "bg-primary text-on-primary shadow-sm"
+                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low"
             }`}
           >
             <span className="material-symbols-outlined text-[20px]">picture_as_pdf</span>
@@ -366,10 +455,10 @@ export default function Materials() {
           <button
             type="button"
             onClick={() => setActiveTab("batch")}
-            className={`px-4 py-3 font-table-data text-table-data font-bold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+            className={`px-4 py-3 font-table-data text-table-data font-bold rounded-lg transition-colors whitespace-nowrap flex items-center gap-2 ${
               activeTab === "batch"
-                ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                ? "bg-primary text-on-primary shadow-sm"
+                : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low"
             }`}
           >
             <span className="material-symbols-outlined text-[20px]">trending_up</span>
@@ -378,12 +467,6 @@ export default function Materials() {
         </div>
       </section>
 
-      {!projectId && (
-        <div className="mt-stack-md border border-outline-variant rounded-xl p-gutter text-on-surface-variant font-body-md">
-          Select a project to manage materials and relative costing.
-        </div>
-      )}
-
       {isError && (
         <div className="mt-stack-md bg-error-container text-on-error-container p-4 rounded-xl">
           Failed to load materials. {(error as Error)?.message}
@@ -391,7 +474,7 @@ export default function Materials() {
       )}
 
       {/* New Material Form Modal / Inline Box */}
-      {showForm && projectId && (
+      {showForm && (
         <section className="mt-stack-md bg-surface-container-lowest border border-outline-variant rounded-xl p-gutter shadow-sm">
           <h3 className="font-headline-md text-headline-md text-on-surface mb-stack-md">
             {editingId ? "Edit Material" : "New Material"}
@@ -492,7 +575,7 @@ export default function Materials() {
       )}
 
       {/* TAB 1: CATALOG & RELATIVE COST CARDS */}
-      {activeTab === "catalog" && projectId && (
+      {activeTab === "catalog" && (
         <section className="mt-stack-md flex flex-col gap-stack-md">
           <div className="flex flex-col sm:flex-row gap-stack-sm w-full">
             <div className="relative flex-1">
@@ -641,7 +724,7 @@ export default function Materials() {
       )}
 
       {/* TAB 2: DIRECT MATERIAL SELECTOR & COST CUSTOMIZER TOOL */}
-      {activeTab === "tool" && projectId && (
+      {activeTab === "tool" && (
         <section className="mt-stack-md bg-surface-container-lowest border border-outline-variant rounded-xl p-gutter shadow-sm flex flex-col gap-stack-md">
           <div className="border-b border-outline-variant pb-stack-sm">
             <h3 className="font-headline-md text-headline-md text-on-surface flex items-center gap-2">
@@ -683,7 +766,7 @@ export default function Materials() {
                       <span className="font-label-caps text-label-caps text-primary font-bold">{selectedMaterial.code}</span>
                       <h4 className="font-headline-md text-headline-md text-on-surface">{selectedMaterial.name}</h4>
                     </div>
-                    <span className="px-2 py-1 bg-surface border border-outline-variant rounded font-table-data text-xs">
+                    <span className="px-2 py-1 bg-surface border border-outline-variant rounded font-table-data text-xs font-bold">
                       {selectedMaterial.unit}
                     </span>
                   </div>
@@ -720,7 +803,7 @@ export default function Materials() {
                       onChange={(e) => setToolMultiplier(Number(e.target.value))}
                       className="h-touch-target-min px-3 w-28 bg-surface border border-outline-variant rounded-lg font-table-data text-table-data font-bold text-lg text-on-surface"
                     />
-                    <span className="text-xs text-on-surface-variant font-table-data">
+                    <span className="text-xs text-on-surface-variant font-table-data font-bold">
                       ({toolMultiplier > 1 ? `+${((toolMultiplier - 1) * 100).toFixed(1)}%` : `${((toolMultiplier - 1) * 100).toFixed(1)}%`})
                     </span>
                   </div>
@@ -733,7 +816,7 @@ export default function Materials() {
                     value={toolSupplier}
                     onChange={(e) => setToolSupplier(e.target.value)}
                     className="h-touch-target-min px-3 bg-surface border border-outline-variant rounded-lg font-table-data text-table-data text-on-surface"
-                    placeholder="e.g. Local Vendor Quote Q3"
+                    placeholder="e.g. Nashik Local Vendor Quote Q3"
                   />
                 </label>
 
@@ -747,7 +830,7 @@ export default function Materials() {
                       onChange={(e) => setToolQuantity(Number(e.target.value))}
                       className="h-touch-target-min px-3 bg-surface border border-outline-variant rounded-lg font-table-data text-table-data text-on-surface"
                     />
-                    <span className="text-xs text-outline">{selectedMaterial?.unit}</span>
+                    <span className="text-xs text-outline font-bold">{selectedMaterial?.unit}</span>
                   </div>
                 </label>
               </div>
@@ -826,7 +909,7 @@ export default function Materials() {
 
                 <div className="bg-surface-container p-3 rounded-xl flex justify-between items-center mt-4">
                   <div>
-                    <span className="text-xs text-outline block">Net Cost Variance Impact</span>
+                    <span className="text-xs text-outline block font-bold">Net Cost Variance Impact</span>
                     <span className={`text-lg font-bold font-mono ${toolComparison.totalVariance > 0 ? "text-error" : "text-emerald-700"}`}>
                       {toolComparison.totalVariance > 0 ? `+${formatInr(toolComparison.totalVariance)}` : formatInr(toolComparison.totalVariance)}
                     </span>
@@ -847,61 +930,132 @@ export default function Materials() {
       )}
 
       {/* TAB 3: GOVERNMENT RULES & PDF IMPORTER */}
-      {activeTab === "importer" && projectId && (
+      {activeTab === "importer" && (
         <section className="mt-stack-md bg-surface-container-lowest border border-outline-variant rounded-xl p-gutter shadow-sm flex flex-col gap-stack-md">
-          <div className="border-b border-outline-variant pb-stack-sm flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+          <div className="border-b border-outline-variant pb-stack-sm flex flex-col sm:flex-row justify-between sm:items-center gap-3">
             <div>
               <h3 className="font-headline-md text-headline-md text-on-surface flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">picture_as_pdf</span>
                 Government Rules & PDF Schedule Importer
               </h3>
               <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-                Parse government schedules of rates (CPWD DSR, State PWD) or PDF material specifications directly into your project library.
+                Parse government schedules of rates (Maharashtra PWD, MJP, CPWD DSR) or PDF material specifications directly into your project library.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => importGovernmentBundle.mutate()}
-              disabled={importGovernmentBundle.isPending}
-              className="h-touch-target-min px-4 bg-secondary text-on-secondary rounded-xl font-table-data text-table-data font-bold hover:bg-primary transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
-            >
-              <span className="material-symbols-outlined text-[18px]">cloud_download</span>
-              {importGovernmentBundle.isPending ? "Importing…" : "1-Click CPWD DSR Bundle Import"}
-            </button>
-          </div>
-
-          <div className="flex flex-col gap-stack-sm">
-            <label className="flex flex-col gap-1">
-              <span className="font-label-caps text-label-caps text-outline font-bold">Paste Raw PDF Text / Government Schedule Lines</span>
-              <textarea
-                rows={8}
-                value={pdfText}
-                onChange={(e) => setPdfText(e.target.value)}
-                className="w-full p-3 bg-surface border border-outline-variant rounded-xl font-mono text-sm text-on-surface focus:outline-none focus:border-primary"
-                placeholder="Paste text copied from government PDF schedule..."
-              />
-            </label>
-
-            <div className="flex justify-between items-center bg-surface-container-low p-3 rounded-xl border border-outline-variant">
-              <span className="text-xs text-on-surface-variant">
-                Supports automated extraction of material code, item title, unit (bag, kg, m³, m²), rate (₹), and IS rule reference citations.
-              </span>
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={!pdfText.trim() || importPdfSchedule.isPending}
-                onClick={() => importPdfSchedule.mutate()}
-                className="h-touch-target-min px-6 bg-primary text-on-primary rounded-xl font-table-data text-table-data font-bold hover:bg-secondary transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                onClick={() => setPdfText(MAHARASHTRA_PWD_PDF_PRESET)}
+                className="h-9 px-3 bg-surface-container border border-outline-variant text-xs text-on-surface rounded-lg font-bold hover:bg-surface-variant transition-colors"
               >
-                <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-                {importPdfSchedule.isPending ? "Parsing & Importing…" : "Parse & Import Materials from Text"}
+                Load Maha PWD Schedule
               </button>
+              <button
+                type="button"
+                onClick={() => setPdfText(CPWD_DSR_PRESET)}
+                className="h-9 px-3 bg-surface-container border border-outline-variant text-xs text-on-surface rounded-lg font-bold hover:bg-surface-variant transition-colors"
+              >
+                Load CPWD DSR Preset
+              </button>
+              <button
+                type="button"
+                onClick={() => importGovernmentBundle.mutate()}
+                disabled={importGovernmentBundle.isPending}
+                className="h-touch-target-min px-4 bg-secondary text-on-secondary rounded-xl font-table-data text-table-data font-bold hover:bg-primary transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+              >
+                <span className="material-symbols-outlined text-[18px]">cloud_download</span>
+                {importGovernmentBundle.isPending ? "Importing…" : "1-Click Full DSR Import"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-stack-lg">
+            {/* Left: Input Text / File Drop */}
+            <div className="flex flex-col gap-stack-sm">
+              <div className="flex justify-between items-center">
+                <span className="font-label-caps text-label-caps text-outline font-bold">1. Input / Upload PDF Schedule Text</span>
+                <label className="cursor-pointer text-xs text-primary font-bold hover:underline flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                  Upload Text/PDF File
+                  <input type="file" accept=".txt,.csv,.pdf" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
+
+              <textarea
+                rows={10}
+                value={pdfText}
+                onChange={(e) => setPdfText(e.target.value)}
+                className="w-full p-3 bg-surface border border-outline-variant rounded-xl font-mono text-xs text-on-surface focus:outline-none focus:border-primary"
+                placeholder="Paste text copied from government PDF schedule..."
+              />
+
+              <div className="flex justify-between items-center bg-surface-container-low p-3 rounded-xl border border-outline-variant">
+                <span className="text-xs text-on-surface-variant font-mono">
+                  {parsedPdfItems.length} structured items detected in text
+                </span>
+                <button
+                  type="button"
+                  disabled={parsedPdfItems.length === 0 || importPdfSchedule.isPending}
+                  onClick={() => importPdfSchedule.mutate()}
+                  className="h-touch-target-min px-6 bg-primary text-on-primary rounded-xl font-table-data text-table-data font-bold hover:bg-secondary transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                >
+                  <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+                  {importPdfSchedule.isPending ? "Importing Table…" : `Import ${parsedPdfItems.length} Items into Material Library`}
+                </button>
+              </div>
+            </div>
+
+            {/* Right: Live Extracted Structured Material Table */}
+            <div className="flex flex-col gap-2 bg-surface border border-outline-variant rounded-2xl p-4 shadow-sm overflow-hidden">
+              <div className="flex justify-between items-center border-b border-outline-variant pb-2">
+                <span className="font-label-caps text-label-caps text-primary font-bold flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[18px]">table_chart</span>
+                  2. Live Extracted Schedule Table Preview
+                </span>
+                <span className="px-2 py-0.5 bg-primary-container/30 text-primary text-xs font-bold rounded">
+                  {parsedPdfItems.length} Extracted
+                </span>
+              </div>
+
+              {parsedPdfItems.length === 0 ? (
+                <div className="p-8 text-center text-on-surface-variant text-sm font-table-data">
+                  No items recognized yet. Paste text or click "Load Maha PWD Schedule" above.
+                </div>
+              ) : (
+                <div className="overflow-x-auto max-h-[350px]">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-surface-container-low sticky top-0 border-b border-outline-variant">
+                      <tr>
+                        <th className="p-2 font-bold text-outline">Code</th>
+                        <th className="p-2 font-bold text-outline">Material Name</th>
+                        <th className="p-2 font-bold text-outline">Unit</th>
+                        <th className="p-2 font-bold text-outline text-right">Base Rate</th>
+                        <th className="p-2 font-bold text-outline">Category</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant/30 font-table-data">
+                      {parsedPdfItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-surface-container-low/50">
+                          <td className="p-2 font-mono font-bold text-primary">{item.code}</td>
+                          <td className="p-2 font-semibold text-on-surface">{item.name}</td>
+                          <td className="p-2 text-on-surface-variant font-mono">{item.unit}</td>
+                          <td className="p-2 text-right font-mono font-bold text-on-surface">
+                            {formatInr(item.baseRate)}
+                          </td>
+                          <td className="p-2 text-outline">{item.category}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </section>
       )}
 
       {/* TAB 4: BATCH CATEGORY ESCALATION & BOQ SYNC */}
-      {activeTab === "batch" && projectId && (
+      {activeTab === "batch" && (
         <section className="mt-stack-md bg-surface-container-lowest border border-outline-variant rounded-xl p-gutter shadow-sm flex flex-col gap-stack-md">
           <div className="border-b border-outline-variant pb-stack-sm">
             <h3 className="font-headline-md text-headline-md text-on-surface flex items-center gap-2">
