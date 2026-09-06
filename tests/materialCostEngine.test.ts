@@ -54,6 +54,44 @@ describe("materialCostEngine", () => {
     expect(parsed[1].category).toBe("Metals & Steel");
   });
 
+  it("parses official Maharashtra PWD State Schedule of Rates (SSR 2022-23/2025 PDF) format", () => {
+    const mahaPdfText = `
+      State Schedule of Rates for the year 2022-23 as approved by Public Works Department Maharashtra
+      Item No Section Code Description Unit Rate (In Rs.) GST (In Rs.)
+      26 Road Survey and DPR 1.26 Survey of C.D. works including L-section and trial pits One Number 16334 12135
+      103 Road Sub grade 2.29b Supplying soft murum at the road site, including conveying and stacking complete One Cubic Metre 432 53
+      113 Road Sub Base 3.01 MORTH 401 Construction of granular sub-base with close graded Material One Cubic Metre 2039 36
+      127 Road Sub Base 3.14 Brooming the W.B.M. surface by wire Brushes for receiving bituminous treatment One Square Metre 18 18
+      156 Road Surfacing 3.44 MORTH 505 DENSE BITUMINOUS MACADAM using crushed aggregates One Cubic Metre 9664 85
+      167 Road Surfacing 4.12 MORTH 510 Open Graded Premix Surfacing OGC 20 mm thickness One Square Metre 193 5
+    `;
+
+    const parsed = parseMaterialTextOrPdf(mahaPdfText);
+    expect(parsed.length).toBe(6);
+    expect(parsed[0].code).toBe("MH-PWD-26");
+    expect(parsed[0].baseRate).toBe(16334);
+    expect(parsed[0].unit).toBe("nos");
+    expect(parsed[0].category).toBe("Survey & Consultancy");
+
+    expect(parsed[1].code).toBe("MH-PWD-103");
+    expect(parsed[1].baseRate).toBe(432);
+    expect(parsed[1].unit).toBe("m³");
+    expect(parsed[1].category).toBe("Earthwork & Subgrade");
+
+    expect(parsed[2].code).toBe("MH-PWD-113");
+    expect(parsed[2].baseRate).toBe(2039);
+    expect(parsed[2].unit).toBe("m³");
+
+    expect(parsed[4].code).toBe("MH-PWD-156");
+    expect(parsed[4].baseRate).toBe(9664);
+    expect(parsed[4].unit).toBe("m³");
+    expect(parsed[4].category).toBe("Road Surfacing & Asphalt");
+
+    expect(parsed[5].code).toBe("MH-PWD-167");
+    expect(parsed[5].baseRate).toBe(193);
+    expect(parsed[5].unit).toBe("m²");
+  });
+
   it("includes valid government DSR material bundle items", () => {
     expect(GOVERNMENT_DSR_MATERIAL_BUNDLE.length).toBeGreaterThan(10);
     const opc = GOVERNMENT_DSR_MATERIAL_BUNDLE.find((m) => m.code === "CPWD-DSR-3.1");

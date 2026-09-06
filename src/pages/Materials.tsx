@@ -10,7 +10,6 @@ import { formatInr } from "@/lib/formatCurrency";
 import {
   calculateRelativeMaterialCost,
   parseMaterialTextOrPdf,
-  GOVERNMENT_DSR_MATERIAL_BUNDLE,
 } from "@/domain/materialCostEngine";
 import {
   MEASUREMENT_UNITS,
@@ -66,24 +65,30 @@ const CATEGORY_OPTIONS = [
   "Concrete & Masonry",
   "Metals & Steel",
   "Aggregates",
-  "Timber & Formwork",
+  "Road Sub-Base & Base",
+  "Road Surfacing & Asphalt",
+  "Earthwork & Subgrade",
+  "Survey & Consultancy",
   "Finishes",
-  "Plumbing",
-  "Electrical",
+  "Plumbing & Piping",
+  "Timber & Formwork",
   "Miscellaneous",
 ];
 
 const MAHARASHTRA_PWD_PDF_PRESET = `GOVERNMENT OF MAHARASHTRA - PUBLIC WORKS DEPARTMENT
-State Schedule of Rates (SSR) & CPWD Civil Worksite Material Specifications 2026
+State Schedule of Rates (SSR) & Civil Worksite Material Specifications 2025-2026
 
+26 Road Survey and DPR 1.26 Survey of C.D. works including L-section and trial pits One Number 16334 12135
+103 Road Sub grade 2.29b Supplying soft murum at the road site, including conveying and stacking complete One Cubic Metre 432 53
+104 Road Sub grade 2.30 Spreading hard murum/ soft murrum/ gravel or kankar for side width complete One Cubic Metre 79 79
+110 Road Sub grade 2.36 MORTH 402 Providing, laying and spreading soil on a prepared sub grade One Cubic Metre 818 31
+113 Road Sub Base 3.01 MORTH 401 Construction of granular sub-base with close graded Material One Cubic Metre 2039 36
+127 Road Sub Base 3.14 Brooming the W.B.M. surface by wire Brushes for receiving bituminous treatment One Square Metre 18 18
+152 Road Sub Base 3.38b MORTH 505 Providing and constructing 50 mm. thick Modified Penetration Macadam One Square Metre 231 2
+156 Road Surfacing 3.44 MORTH 505 DENSE BITUMINOUS MACADAM using crushed aggregates One Cubic Metre 9664 85
+167 Road Surfacing 4.12 MORTH 510 Open Graded Premix Surfacing OGC 20 mm thickness One Square Metre 193 5
 MH-PWD-3.01 OPC 53 Grade Cement bag 380.00 IS 269:2015 Clause 5.1
-MH-PWD-3.02 Portland Pozzolana Cement PPC bag 350.00 IS 1489:2015
-MH-PWD-5.22 TMT Steel Fe-500D Reinforcement Bars kg 68.50 IS 1786:2008 Grade Fe500D
-MH-PWD-3.05 Coarse Aggregate 20mm Crushed Basalt m³ 1180.00 IS 383:2016 Table 2
-MH-PWD-3.08 Natural River Sand Zone II m³ 1750.00 IS 383:2016 Zone II
-MH-PWD-3.09 Manufactured Sand M-Sand m³ 1400.00 IS 383:2016 Clause 4.2
-MH-PWD-6.01 First Class Burnt Clay Bricks 10 N/mm² 1000 nos 7800.00 IS 1077:1992
-MH-PWD-4.13 Ready Mix Concrete M25 Grade m³ 4250.00 IS 456:2000 & IS 4926`;
+MH-PWD-5.22 TMT Steel Fe-500D Reinforcement Bars kg 68.50 IS 1786:2008 Grade Fe500D`;
 
 const CPWD_DSR_PRESET = `CPWD Delhi Schedule of Rates (DSR 2023)
 CPWD-DSR-3.1 Ordinary Portland Cement (OPC 53) bag 380.00 IS 269:2015
@@ -135,6 +140,7 @@ export default function Materials() {
 
   // Importer State
   const [pdfText, setPdfText] = useState<string>(MAHARASHTRA_PWD_PDF_PRESET);
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
 
   // Batch Escalation State
   const [batchCategory, setBatchCategory] = useState<string>("");
@@ -193,20 +199,52 @@ export default function Materials() {
     );
   }, [materials, search]);
 
-  // Handle file drop or upload in PDF importer
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle direct PDF file upload to backend parser or plain text file upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        setPdfText(content);
-        showToast(`Loaded ${file.name}. Parsing extracted schedule items…`, "info");
+    if (file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf") {
+      setIsUploadingPdf(true);
+      showToast(`Uploading and extracting PDF "${file.name}"...`, "info");
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const token = localStorage.getItem("token");
+        const response = await fetch(`/api/projects/${projectId}/materials/upload-pdf`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+
+        const resData = await response.json();
+        if (!response.ok) {
+          throw new Error(resData.error || "Failed to process PDF file.");
+        }
+
+        if (resData.rawText) {
+          setPdfText(resData.rawText);
+        }
+        void qc.invalidateQueries({ queryKey: ["materials", projectId] });
+        showToast(resData.message || `Successfully parsed and imported ${resData.importedCount} items from PDF!`, "success");
+      } catch (err) {
+        showToast((err as Error).message || "PDF parsing failed", "error");
+      } finally {
+        setIsUploadingPdf(false);
       }
-    };
-    reader.readAsText(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        if (content) {
+          setPdfText(content);
+          showToast(`Loaded ${file.name}. Parsing extracted schedule items…`, "info");
+        }
+      };
+      reader.readAsText(file);
+    }
   };
 
   // Save single material
@@ -364,7 +402,7 @@ export default function Materials() {
               <h2 className="font-headline-lg text-headline-lg text-on-surface">Material Library & Relative Costing</h2>
             </div>
             <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-              Select materials, track volatile market costs relative to government standards (DSR), and import rule schedules from PDF.
+              Select materials, track volatile market costs relative to government standards (DSR / Maha PWD SSR), and parse official PDF schedules.
             </p>
           </div>
 
@@ -939,7 +977,7 @@ export default function Materials() {
                 Government Rules & PDF Schedule Importer
               </h3>
               <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-                Parse government schedules of rates (Maharashtra PWD, MJP, CPWD DSR) or PDF material specifications directly into your project library.
+                Upload or parse government schedules of rates (Maharashtra PWD SSR, MJP, CPWD DSR) PDF files directly into your project library.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -970,14 +1008,14 @@ export default function Materials() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-stack-lg">
-            {/* Left: Input Text / File Drop */}
+            {/* Left: Input Text / PDF File Upload */}
             <div className="flex flex-col gap-stack-sm">
               <div className="flex justify-between items-center">
-                <span className="font-label-caps text-label-caps text-outline font-bold">1. Input / Upload PDF Schedule Text</span>
-                <label className="cursor-pointer text-xs text-primary font-bold hover:underline flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px]">upload_file</span>
-                  Upload Text/PDF File
-                  <input type="file" accept=".txt,.csv,.pdf" onChange={handleFileUpload} className="hidden" />
+                <span className="font-label-caps text-label-caps text-outline font-bold">1. Upload PDF File or Input Schedule Text</span>
+                <label className="cursor-pointer px-3 py-1 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm">
+                  <span className="material-symbols-outlined text-[18px]">upload_file</span>
+                  {isUploadingPdf ? "Parsing PDF File…" : "Upload PDF Schedule File"}
+                  <input type="file" accept=".pdf,.txt,.csv" onChange={handleFileUpload} disabled={isUploadingPdf} className="hidden" />
                 </label>
               </div>
 
@@ -985,17 +1023,18 @@ export default function Materials() {
                 rows={10}
                 value={pdfText}
                 onChange={(e) => setPdfText(e.target.value)}
+                disabled={isUploadingPdf}
                 className="w-full p-3 bg-surface border border-outline-variant rounded-xl font-mono text-xs text-on-surface focus:outline-none focus:border-primary"
-                placeholder="Paste text copied from government PDF schedule..."
+                placeholder="Upload a PDF file using the button above or paste text copied from government PDF schedule..."
               />
 
               <div className="flex justify-between items-center bg-surface-container-low p-3 rounded-xl border border-outline-variant">
                 <span className="text-xs text-on-surface-variant font-mono">
-                  {parsedPdfItems.length} structured items detected in text
+                  {isUploadingPdf ? "Extracting PDF text pages…" : `${parsedPdfItems.length} structured items detected in schedule text`}
                 </span>
                 <button
                   type="button"
-                  disabled={parsedPdfItems.length === 0 || importPdfSchedule.isPending}
+                  disabled={parsedPdfItems.length === 0 || importPdfSchedule.isPending || isUploadingPdf}
                   onClick={() => importPdfSchedule.mutate()}
                   className="h-touch-target-min px-6 bg-primary text-on-primary rounded-xl font-table-data text-table-data font-bold hover:bg-secondary transition-colors disabled:opacity-50 flex items-center gap-2 shadow-sm"
                 >
@@ -1019,7 +1058,7 @@ export default function Materials() {
 
               {parsedPdfItems.length === 0 ? (
                 <div className="p-8 text-center text-on-surface-variant text-sm font-table-data">
-                  No items recognized yet. Paste text or click "Load Maha PWD Schedule" above.
+                  {isUploadingPdf ? "Extracting text and parsing PDF table rows…" : "No items recognized yet. Click 'Upload PDF Schedule File' or 'Load Maha PWD Schedule' above."}
                 </div>
               ) : (
                 <div className="overflow-x-auto max-h-[350px]">

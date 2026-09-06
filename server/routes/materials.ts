@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { safeErrorMessage } from "../security/httpErrors.js";
 import { Router } from "express";
+import multer from "multer";
+import { createRequire } from "node:module";
 import { materialInputSchema } from "../../src/domain/schemas.js";
 import {
   GOVERNMENT_DSR_MATERIAL_BUNDLE,
@@ -10,6 +12,14 @@ import {
 import { requirePrisma } from "../db.js";
 import { writeAudit } from "../auditLog.js";
 import { assertProjectAccess } from "../services/projectAccess.js";
+
+const require = createRequire(import.meta.url);
+const pdfModule = require("pdf-parse");
+
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB max
+});
 
 export const materialsRouter = Router({ mergeParams: true });
 
@@ -91,6 +101,118 @@ materialsRouter.post("/", async (req, res) => {
     });
     await writeAudit(userId, "material.create", "MaterialMaster", row.id, { name: row.name });
     res.status(201).json({ material: row });
+  } catch (e) {
+    const status = (e as Error & { status?: number }).status ?? 503;
+    res.status(status).json({ error: safeErrorMessage(e) });
+  }
+});
+
+/** Upload and Parse PDF Schedule File directly */
+materialsRouter.post("/upload-pdf", pdfUpload.single("file"), async (req, res) => {
+  try {
+    const userId = req.auth!.userId;
+    const { projectId } = req.params as { projectId: string };
+    const project = await assertProjectAccess(userId, projectId);
+
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: "No PDF file attached in upload request." });
+    }
+
+    let extractedText = "";
+    let numPages = 1;
+
+    try {
+      const uint8 = new Uint8Array(req.file.buffer);
+      if (typeof pdfModule === "function") {
+        const data = await pdfModule(uint8);
+        extractedText = data.text || "";
+        numPages = data.numpages || 1;
+      } else if (pdfModule.PDFParse) {
+        const parser = new pdfModule.PDFParse(uint8);
+        const result = await parser.getText();
+        extractedText = typeof result === "string" ? result : result.text || "";
+        numPages = result.numPages || 1;
+      }
+    } catch (parseErr) {
+      return res.status(400).json({ error: `Failed to extract text from PDF file: ${(parseErr as Error).message}` });
+    }
+
+    if (!extractedText.trim()) {
+      return res.status(400).json({ error: "No text could be extracted from this PDF document." });
+    }
+
+    const items = parseMaterialTextOrPdf(extractedText);
+
+    if (items.length === 0) {
+      return res.status(400).json({
+        error: "Extracted PDF text, but could not identify structured schedule items.",
+        extractedTextSnippet: extractedText.slice(0, 500),
+      });
+    }
+
+    const prisma = requirePrisma();
+    let imported = 0;
+
+    for (const item of items) {
+      const existing = await prisma.materialMaster.findFirst({
+        where: { orgId: project.orgId, code: item.code },
+      });
+
+      if (existing) {
+        await prisma.materialMaster.update({
+          where: { id: existing.id },
+          data: {
+            name: item.name,
+            category: item.category,
+            unit: item.unit,
+            spec: item.spec,
+          },
+        });
+        await prisma.materialRate.create({
+          data: {
+            materialId: existing.id,
+            supplierName: item.governmentSchedule ?? `PDF Upload: ${req.file.originalname}`,
+            rate: new Prisma.Decimal(item.baseRate),
+            effectiveFrom: new Date(),
+          },
+        });
+      } else {
+        await prisma.materialMaster.create({
+          data: {
+            orgId: project.orgId,
+            code: item.code,
+            name: item.name,
+            category: item.category,
+            unit: item.unit,
+            spec: item.spec,
+            rates: {
+              create: {
+                supplierName: item.governmentSchedule ?? `PDF Upload: ${req.file.originalname}`,
+                rate: new Prisma.Decimal(item.baseRate),
+                effectiveFrom: new Date(),
+              },
+            },
+          },
+        });
+      }
+      imported++;
+    }
+
+    await writeAudit(userId, "material.upload_pdf", "MaterialMaster", project.orgId, {
+      imported,
+      filename: req.file.originalname,
+      pages: numPages,
+    });
+
+    res.json({
+      success: true,
+      filename: req.file.originalname,
+      pagesCount: numPages,
+      importedCount: imported,
+      rawText: extractedText,
+      items,
+      message: `Successfully uploaded "${req.file.originalname}" (${numPages} pages) and imported ${imported} material rates into library.`,
+    });
   } catch (e) {
     const status = (e as Error & { status?: number }).status ?? 503;
     res.status(status).json({ error: safeErrorMessage(e) });

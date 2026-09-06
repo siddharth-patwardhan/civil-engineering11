@@ -27,10 +27,10 @@ export function calculateRelativeMaterialCost(input: MaterialCostInput): Materia
   const adjustedBaseRate = baseRate * mult;
   const currentRate = Math.max(0, input.currentRate);
   const effectiveRate = currentRate * mult;
-  
+
   const diffAmount = effectiveRate - adjustedBaseRate;
   const diffPercent = adjustedBaseRate > 0 ? (diffAmount / adjustedBaseRate) * 100 : 0;
-  
+
   const qty = Math.max(0, input.quantity ?? 1);
   const totalCostAtBase = adjustedBaseRate * qty;
   const totalCostAtCurrent = effectiveRate * qty;
@@ -301,49 +301,198 @@ export const GOVERNMENT_DSR_MATERIAL_BUNDLE: GovernmentMaterialRule[] = [
     spec: "Interior washable wall paint conforming to IS 15489",
     isStandardRef: "IS 15489:2004",
     governmentSchedule: "CPWD DSR 2023 Item 13.1",
-  }
+  },
 ];
 
 /**
- * Extract / parse material items from raw text (e.g. copied or extracted from PDF government schedule)
+ * Helper to normalize unit text into standard measurement units
+ */
+export function normalizeUnitString(rawUnit: string): string {
+  const u = rawUnit.toLowerCase().trim();
+  if (u.includes("bag")) return "bag";
+  if (u.includes("cubic m") || u.includes("m3") || u.includes("m³") || u.includes("cum") || u.includes("m´‡") || u.includes("m´")) return "m³";
+  if (u.includes("square m") || u.includes("m2") || u.includes("m²") || u.includes("sqm") || u.includes("m´†")) return "m²";
+  if (u.includes("metric ton") || u.includes("tonne") || u.includes("mt")) return "tonne";
+  if (u.includes("1000")) return "1000 nos";
+  if (u.includes("num") || u.includes("nos") || u.includes("each") || u.includes("per no")) return "nos";
+  if (u.includes("kilo") || u.includes("kg")) return "kg";
+  if (u.includes("litr") || u.includes("litre") || u.includes("liter") || u.includes("ltr")) return "litre";
+  if (u.includes("quintal")) return "quintal";
+  if (u.includes("running") || u.includes("rmt") || u.includes("rm")) return "m";
+  return rawUnit.trim();
+}
+
+/**
+ * Helper to infer material category from text context
+ */
+export function inferMaterialCategory(text: string): string {
+  const t = text.toLowerCase();
+  if (t.includes("surfacing") || t.includes("bituminous") || t.includes("bitumen") || t.includes("asphalt") || t.includes("ogc") || t.includes("dbm") || t.includes("bc")) {
+    return "Road Surfacing & Asphalt";
+  }
+  if (t.includes("survey") || t.includes("dpr") || t.includes("testing") || t.includes("investigation")) {
+    return "Survey & Consultancy";
+  }
+  if (t.includes("sub grade") || t.includes("earthwork") || t.includes("excavation") || t.includes("murum") || t.includes("soil") || t.includes("embankment")) {
+    return "Earthwork & Subgrade";
+  }
+  if (t.includes("sub base") || t.includes("base course") || t.includes("wbm") || t.includes("macadam") || t.includes("gsb") || t.includes("wmm")) {
+    return "Road Sub-Base & Base";
+  }
+  if (t.includes("cement") || t.includes("concrete") || t.includes("brick") || t.includes("block") || t.includes("masonry") || t.includes("rmc") || t.includes("mortar") || t.includes("plaster")) {
+    return "Concrete & Masonry";
+  }
+  if (t.includes("steel") || t.includes("tmt") || t.includes("rebar") || t.includes("iron") || t.includes("beam") || t.includes("angle") || t.includes("channel") || t.includes("fe-500") || t.includes("fe-550")) {
+    return "Metals & Steel";
+  }
+  if (t.includes("sand") || t.includes("aggregate") || t.includes("stone") || t.includes("gravel") || t.includes("boulder") || t.includes("rubble")) {
+    return "Aggregates";
+  }
+  if (t.includes("tile") || t.includes("paint") || t.includes("flooring") || t.includes("finish") || t.includes("marble") || t.includes("granite")) {
+    return "Finishes";
+  }
+  if (t.includes("pipe") || t.includes("plumbing") || t.includes("sanitary") || t.includes("valve") || t.includes("water")) {
+    return "Plumbing & Piping";
+  }
+  if (t.includes("timber") || t.includes("formwork") || t.includes("shuttering") || t.includes("wood") || t.includes("plywood")) {
+    return "Timber & Formwork";
+  }
+  return "Miscellaneous";
+}
+
+/**
+ * Extract / parse material items from raw text or extracted PDF schedule text.
+ * Supports official Maharashtra PWD SSR, MJP, CPWD DSR, and structured civil PDF tables.
  */
 export function parseMaterialTextOrPdf(rawText: string): GovernmentMaterialRule[] {
-  const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!rawText || typeof rawText !== "string") return [];
+
+  // Clean delimiters and PDF font encoding artifacts
+  const cleanText = rawText
+    .replace(/\r/g, "")
+    .replace(/m´‡/g, "m³")
+    .replace(/m´†/g, "m²")
+    .replace(/[·|]/g, " ")
+    .replace(/\u00A0/g, " ");
+
+  const lines = cleanText.split("\n").map((l) => l.trim()).filter(Boolean);
   const items: GovernmentMaterialRule[] = [];
+  const codeSet = new Set<string>();
+
+  const UNIT_PATTERN = "(?:one\\s+cubic\\s+metr[ee]|one\\s+square\\s+metr[ee]|one\\s+metric\\s+tonne|one\\s+number|per\\s+bag|1000\\s+nos|per\\s+kg|per\\s+litre|per\\s+quintal|cubic\\s+metr[ee]|square\\s+metr[ee]|metric\\s+tonne|running\\s+metr[ee]|bag|kg|m³|m2|m²|m|cum|sqm|tonne|litre|liter|piece|nos|1000 nos|each)";
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const match = line.match(/(?:item|code|dsr|is|mh-pwd)?[:\s]*([A-Z0-9.\/-]+)\s+([A-Za-z0-9\s(),.\-–]+?)\s+(?:unit[:\s]*)?(bag|kg|m³|m2|m²|m|cum|sqm|tonne|litre|liter|piece|nos|1000 nos)\s+(?:rs\.?|₹)?\s*([0-9,]+(?:\.[0-9]+)?)/i);
 
-    if (match) {
-      const code = match[1].toUpperCase();
-      const name = match[2].trim();
-      const unit = match[3].toLowerCase();
-      const rate = parseFloat(match[4].replace(/,/g, ""));
+    // Skip table header / metadata lines without material units
+    if (
+      line.match(/^(page\s+\d+|state\s+schedule|government\s+of|public\s+works\s+department|table\s+of\s+contents|index|chapter|\d{4}-\d{2})/i) ||
+      line.match(/^(sr\.?\s*no|item\s+no|description|unit|rate\s*\(in\s*rs\)|gst\s*\(in\s*rs\))/i) ||
+      (line.match(/schedule|department|government|catalog|dsr/i) && !line.match(new RegExp(UNIT_PATTERN, "i")) && !line.match(/Unit:/i))
+    ) {
+      continue;
+    }
 
-      let category = "Miscellaneous";
-      const nameLower = name.toLowerCase();
-      if (nameLower.includes("cement") || nameLower.includes("concrete") || nameLower.includes("brick") || nameLower.includes("block")) {
-        category = "Concrete & Masonry";
-      } else if (nameLower.includes("steel") || nameLower.includes("bar") || nameLower.includes("tmt") || nameLower.includes("iron")) {
-        category = "Metals & Steel";
-      } else if (nameLower.includes("sand") || nameLower.includes("aggregate") || nameLower.includes("stone") || nameLower.includes("gravel")) {
-        category = "Aggregates";
-      } else if (nameLower.includes("tile") || nameLower.includes("paint") || nameLower.includes("plaster") || nameLower.includes("marble")) {
-        category = "Finishes";
-      } else if (nameLower.includes("wood") || nameLower.includes("timber") || nameLower.includes("plywood")) {
-        category = "Timber & Formwork";
+    // Pattern 1: Key-Value / Pipe Labeled PDF format
+    // e.g. "[MH-PWD-MAT-01] Ordinary Portland Cement (OPC 53 Grade) | Unit: bag (50kg) | Base Rate: Rs.380 | Nashik: Rs.390 | Ref: Maharashtra PWD SSR"
+    const kvMatch = line.match(/^\[?([A-Za-z0-9._\-]+)\]?\s+(.*?)\s*Unit:\s*(.*?)\s*Base\s+Rate:\s*(?:Rs\.?|₹)?\s*([0-9,]+(?:\.[0-9]+)?)(?:\\s+(.*))?/i);
+
+    if (kvMatch) {
+      const rawCode = kvMatch[1].trim();
+      const rawName = kvMatch[2].replace(/\|/g, "").trim();
+      const rawUnit = kvMatch[3].replace(/\|/g, "").trim();
+      const rate = parseFloat(kvMatch[4].replace(/,/g, ""));
+      const spec = kvMatch[5]?.replace(/\|/g, "").trim();
+
+      if (!isNaN(rate) && rate > 0 && rawName.length >= 2) {
+        let code = rawCode.match(/^(MH|CPWD|DSR|ITEM|SSR)/i) ? rawCode.toUpperCase() : `MH-PWD-${rawCode.toUpperCase()}`;
+        if (codeSet.has(code)) code = `${code}-${items.length + 1}`;
+        codeSet.add(code);
+
+        const unit = normalizeUnitString(rawUnit);
+        const category = inferMaterialCategory(`${rawName} ${spec ?? ""}`);
+
+        items.push({
+          code,
+          name: rawName,
+          category,
+          unit,
+          baseRate: rate,
+          spec: spec ? `Ref: ${spec}` : `Maharashtra PWD Schedule Item ${rawCode}`,
+          governmentSchedule: "Maharashtra PWD / State Schedule of Rates",
+        });
+        continue;
       }
+    }
 
-      items.push({
-        code,
-        name,
-        category,
-        unit,
-        baseRate: rate,
-        spec: `Extracted from PDF schedule (${line.slice(0, 50)})`,
-        governmentSchedule: "Imported PDF Government Schedule",
-      });
+    // Pattern 2: Single line match: Code (e.g. CPWD-3.1, MH-PWD-3.01, 103, 2.29b), Description, Unit, Rate
+    const lineMatch = line.match(new RegExp(`^(?:item\\s*)?([A-Za-z0-9._\\-]+)\\s+(.*?)\\s+(${UNIT_PATTERN})\\s+(?:rs\\.?|₹)?\\s*([0-9,]+(?:\\.[0-9]+)?)(?:\\s+(.*))?`, "i"));
+
+    if (lineMatch) {
+      const rawCode = lineMatch[1].trim();
+      const rawDesc = lineMatch[2].trim();
+      const rawUnit = lineMatch[3].trim();
+      const rate = parseFloat(lineMatch[4].replace(/,/g, ""));
+      const spec = lineMatch[5]?.trim();
+
+      if (!isNaN(rate) && rate > 0 && rawDesc.length >= 2) {
+        let code = rawCode.match(/^(MH|CPWD|DSR|ITEM|SSR)/i) ? rawCode.toUpperCase() : `MH-PWD-${rawCode.toUpperCase()}`;
+        if (codeSet.has(code)) code = `${code}-${items.length + 1}`;
+        codeSet.add(code);
+
+        let name = rawDesc.replace(/\s+/g, " ").trim();
+        if (name.length > 120) name = name.slice(0, 117) + "…";
+
+        const unit = normalizeUnitString(rawUnit);
+        const category = inferMaterialCategory(`${rawDesc} ${spec ?? ""}`);
+
+        items.push({
+          code,
+          name,
+          category,
+          unit,
+          baseRate: rate,
+          spec: spec ? `Ref: ${spec}` : `Maharashtra PWD SSR Item ${rawCode}`,
+          governmentSchedule: "Maharashtra PWD / State Schedule of Rates",
+        });
+        continue;
+      }
+    }
+
+    // Pattern 3: Lookahead multiline format where description spans across line break (and next line does NOT start with item code)
+    if (i + 1 < lines.length && !lines[i + 1].match(/^(?:CPWD|MH|DSR|ITEM|SSR|\d{1,4}[.\s-])/i)) {
+      const combined = `${line} ${lines[i + 1]}`;
+      const multiMatch = combined.match(new RegExp(`^(?:item\\s*)?([A-Za-z0-9._\\-]+)?\\s*(.*?)\\s+(${UNIT_PATTERN})\\s+(?:rs\\.?|₹)?\\s*([0-9,]+(?:\.[0-9]+)?)`, "i"));
+
+      if (multiMatch && multiMatch[2].trim().length >= 5) {
+        const rawCode = multiMatch[1]?.trim() || `ITEM-${items.length + 1}`;
+        const rawDesc = multiMatch[2].trim();
+        const rawUnit = multiMatch[3].trim();
+        const rate = parseFloat(multiMatch[4].replace(/,/g, ""));
+
+        if (!isNaN(rate) && rate > 0) {
+          let code = rawCode.match(/^(MH|CPWD|DSR|ITEM|SSR)/i) ? rawCode.toUpperCase() : `MH-PWD-${rawCode.toUpperCase()}`;
+          if (codeSet.has(code)) code = `${code}-${items.length + 1}`;
+          codeSet.add(code);
+
+          let name = rawDesc.replace(/\s+/g, " ").trim();
+          if (name.length > 120) name = name.slice(0, 117) + "…";
+
+          const unit = normalizeUnitString(rawUnit);
+          const category = inferMaterialCategory(`${rawDesc} ${name}`);
+
+          items.push({
+            code,
+            name,
+            category,
+            unit,
+            baseRate: rate,
+            spec: `Maharashtra PWD SSR Item ${rawCode}`,
+            governmentSchedule: "Maharashtra PWD State Schedule of Rates",
+          });
+          i++; // skip next line as it was merged
+        }
+      }
     }
   }
 
